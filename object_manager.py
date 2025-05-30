@@ -55,7 +55,7 @@ class ObjectManager:
                 return
         print(f"Warning: {name} not found in active objects")
 
-    def update(self, object_list):
+    def update(self, object_list, persist=False):
         current_names = set()
         for obj in object_list:
             name = obj["name"]
@@ -69,9 +69,10 @@ class ObjectManager:
             elif status == "inactive":
                 self.remove_object(name)
 
-        for obj_name, state in self.objects.items():
-            if state["active"] and state["name"] not in current_names:
-                self.remove_object(state["name"])
+        if not persist:
+            for obj_name, state in self.objects.items():
+                if state["active"] and state["name"] not in current_names:
+                    self.remove_object(state["name"])
 
     def _move_object(self, obj_name, pos, quat):
         body_id = self.objects[obj_name]["body_id"]

@@ -4,18 +4,51 @@
     <map znear="0.001" zfar="10.0"/>
   </visual>
   <worldbody>
-  <camera name="topview" pos="0 0 2" euler="-90 0 0" />
-  <body name="table" pos="0 0 0">
-    <geom type="box" size="0.5 0.5 0.02" rgba="0.6 0.6 0.6 1"/>
-  </body>    <body name="object0" pos="1000 1000 1000"><freejoint/><geom type="cylinder" size="0.03 0.1" rgba="0.8 0.2 0.2 1"/></body>
-    <body name="object1" pos="1000 1000 1000"><freejoint/><geom type="cylinder" size="0.03 0.1" rgba="0.8 0.2 0.2 1"/></body>
-    <body name="object2" pos="1000 1000 1000"><freejoint/><geom type="cylinder" size="0.03 0.1" rgba="0.8 0.2 0.2 1"/></body>
-    <body name="object3" pos="1000 1000 1000"><freejoint/><geom type="cylinder" size="0.03 0.1" rgba="0.8 0.2 0.2 1"/></body>
-    <body name="object4" pos="1000 1000 1000"><freejoint/><geom type="cylinder" size="0.03 0.1" rgba="0.8 0.2 0.2 1"/></body>
-    <body name="object5" pos="1000 1000 1000"><freejoint/><geom type="cylinder" size="0.03 0.1" rgba="0.8 0.2 0.2 1"/></body>
-    <body name="object6" pos="1000 1000 1000"><freejoint/><geom type="cylinder" size="0.03 0.1" rgba="0.8 0.2 0.2 1"/></body>
-    <body name="object7" pos="1000 1000 1000"><freejoint/><geom type="cylinder" size="0.03 0.1" rgba="0.8 0.2 0.2 1"/></body>
-    <body name="object8" pos="1000 1000 1000"><freejoint/><geom type="cylinder" size="0.03 0.1" rgba="0.8 0.2 0.2 1"/></body>
-    <body name="object9" pos="1000 1000 1000"><freejoint/><geom type="cylinder" size="0.03 0.1" rgba="0.8 0.2 0.2 1"/></body>
+    <camera name="topview" pos="0 0 2" euler="-90 0 0" fovy="0" />
+    
+    <body name="table" pos="0 0 0">
+      <geom type="box" size="0.5 0.5 0.02" rgba="0.6 0.6 0.6 1"/>
+    </body>
+
+    <body name="object0" pos="0 0 0">
+      <freejoint/>
+      <geom type="cylinder" size="0.03 0.1" rgba="1 0 0 1"/>
+    </body>
+    <body name="object1" pos="0 0 0">
+      <freejoint/>
+      <geom type="cylinder" size="0.03 0.1" rgba="0 1 0 1"/>
+    </body>
+    <body name="object2" pos="0 0 0">
+      <freejoint/>
+      <geom type="cylinder" size="0.03 0.1" rgba="0 0 1 1"/>
+    </body>
+    <body name="object3" pos="0 0 0">
+      <freejoint/>
+      <geom type="cylinder" size="0.03 0.1" rgba="1 1 0 1"/>
+    </body>
+    <body name="object4" pos="0 0 0">
+      <freejoint/>
+      <geom type="cylinder" size="0.03 0.1" rgba="0 1 1 1"/>
+    </body>
+    <body name="object5" pos="0 0 0">
+      <freejoint/>
+      <geom type="cylinder" size="0.03 0.1" rgba="1 0 1 1"/>
+    </body>
+    <body name="object6" pos="0 0 0">
+      <freejoint/>
+      <geom type="cylinder" size="0.03 0.1" rgba="0.5 0.5 0.5 1"/>
+    </body>
+    <body name="object7" pos="0 0 0">
+      <freejoint/>
+      <geom type="cylinder" size="0.03 0.1" rgba="1 0.5 0 1"/>
+    </body>
+    <body name="object8" pos="0 0 0">
+      <freejoint/>
+      <geom type="cylinder" size="0.03 0.1" rgba="0.5 0 1 1"/>
+    </body>
+    <body name="object9" pos="0 0 0">
+      <freejoint/>
+      <geom type="cylinder" size="0.03 0.1" rgba="0 0.5 1 1"/>
+    </body>
   </worldbody>
 </mujoco>
