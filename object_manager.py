@@ -78,8 +78,14 @@ class ObjectManager:
         body_id = self.objects[obj_name]["body_id"]
         joint_adr = self.model.body_jntadr[body_id]
         qpos_addr = self.model.jnt_qposadr[joint_adr]
+        qvel_addr = self.model.jnt_dofadr[joint_adr]
+
+        # Set position and orientation
         self.data.qpos[qpos_addr:qpos_addr+3] = pos
         self.data.qpos[qpos_addr+3:qpos_addr+7] = quat
+
+        # Zero velocities for freejoint (6 DOF)
+        self.data.qvel[qvel_addr:qvel_addr+6] = 0
 
     def _hide_object(self, obj_name):
         self._move_object(obj_name, self.hide_pos, [1, 0, 0, 0])
