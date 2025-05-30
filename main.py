@@ -22,6 +22,7 @@ object_half_height = object_size[1]  # half-height of cylinder
 z_center = table_height + object_half_height
 
 update_interval = 0.5  # seconds between updates
+last_update_time = time.time()
 
 # Initial object list
 object_list = [
@@ -35,15 +36,16 @@ with mujoco.viewer.launch_passive(model, data) as viewer:
     viewer.cam.elevation = -45
     viewer.cam.distance = 2.0
     while viewer.is_running():
-        # Update objects
-        manager.update(object_list)
-        mujoco.mj_forward(model, data)
+        current_time = time.time()
+        if current_time - last_update_time >= update_interval:
+            # Update objects
+            manager.update(object_list)
+            # Generate new random object list
+            object_list = [
+                {"name": "cup", "pos": [np.random.uniform(-0.4, 0.4), np.random.uniform(-0.4, 0.4), z_center], "quat": [1, 0, 0, 0]},
+                {"name": "block", "pos": [np.random.uniform(-0.4, 0.4), np.random.uniform(-0.4, 0.4), z_center], "quat": [1, 0, 0, 0]}
+            ]
+            last_update_time = current_time
 
-        # Create new random object list
-        object_list = [
-            {"name": "cup", "pos": [np.random.uniform(-0.4, 0.4), np.random.uniform(-0.4, 0.4), z_center], "quat": [1, 0, 0, 0]},
-            {"name": "block", "pos": [np.random.uniform(-0.4, 0.4), np.random.uniform(-0.4, 0.4), z_center], "quat": [1, 0, 0, 0]}
-        ]
-
+        mujoco.mj_step(model, data)
         viewer.sync()
-        time.sleep(update_interval)
