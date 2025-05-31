@@ -7,13 +7,12 @@ class ObjectManager:
         self.data = data
         self.hide_pos = hide_pos
 
+        # Store body information
         self.objects = {}
         for name in object_names:
             geom_id = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_GEOM, name)
             body_id = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_BODY, name)
             self.objects[name] = {
-                "active": False,
-                "name": None,
                 "geom_id": geom_id,
                 "body_id": body_id,
                 "contype": model.geom_contype[geom_id],
@@ -23,37 +22,18 @@ class ObjectManager:
             self._hide_object(name)
 
     def add_object(self, name, pos, quat):
-        available = [obj for obj, state in self.objects.items() if not state["active"]]
-        if not available:
-            print(f"Warning: No available objects to assign to {name}")
-            return
-        obj_name = available[0]
-        state = self.objects[obj_name]
-        state["active"] = True
-        state["name"] = name
-
-        self.model.geom_contype[state["geom_id"]] = state["contype"]
-        self.model.geom_conaffinity[state["geom_id"]] = state["conaffinity"]
-        self.model.body_mass[state["body_id"]] = state["mass"]
-        self._move_object(obj_name, pos, quat)
-        print(f"Added {name} as {obj_name}")
+        assert name in self.objects, f"Unknown object: {name}"
+        self._activate_object(name, pos, quat)
+        print(f"Added {name}")
 
     def remove_object(self, name):
-        for obj_name, state in self.objects.items():
-            if state["name"] == name:
-                self._hide_object(obj_name)
-                state["active"] = False
-                state["name"] = None
-                print(f"Removed {name} (was {obj_name})")
-                return
-        print(f"Warning: {name} not found in active objects")
+        assert name in self.objects, f"Unknown object: {name}"
+        self._hide_object(name)
+        print(f"Removed {name}")
 
     def move_object(self, name, pos, quat):
-        for obj_name, state in self.objects.items():
-            if state["name"] == name:
-                self._move_object(obj_name, pos, quat)
-                return
-        print(f"Warning: {name} not found in active objects")
+        assert name in self.objects, f"Unknown object: {name}"
+        self._move_object(name, pos, quat)
 
     def update(self, object_list, persist=False):
         current_names = set()
@@ -62,37 +42,41 @@ class ObjectManager:
             current_names.add(name)
             status = obj.get("status", "active")
             if status == "active":
-                if any(state["name"] == name for state in self.objects.values()):
-                    self.move_object(name, obj["pos"], obj["quat"])
-                else:
-                    self.add_object(name, obj["pos"], obj["quat"])
+                self.add_object(name, obj["pos"], obj["quat"])
             elif status == "inactive":
                 self.remove_object(name)
 
         if not persist:
-            for obj_name, state in self.objects.items():
-                if state["active"] and state["name"] not in current_names:
-                    self.remove_object(state["name"])
+            for name in self.objects:
+                if name not in current_names:
+                    self.remove_object(name)
 
-    def _move_object(self, obj_name, pos, quat):
-        body_id = self.objects[obj_name]["body_id"]
+    def _activate_object(self, name, pos, quat):
+        obj = self.objects[name]
+        self.model.geom_contype[obj["geom_id"]] = obj["contype"]
+        self.model.geom_conaffinity[obj["geom_id"]] = obj["conaffinity"]
+        self.model.body_mass[obj["body_id"]] = obj["mass"]
+        self._move_object(name, pos, quat)
+
+    def _move_object(self, name, pos, quat):
+        obj = self.objects[name]
+        body_id = obj["body_id"]
         joint_adr = self.model.body_jntadr[body_id]
         qpos_addr = self.model.jnt_qposadr[joint_adr]
         qvel_addr = self.model.jnt_dofadr[joint_adr]
 
-        # Set position and orientation
         self.data.qpos[qpos_addr:qpos_addr+3] = pos
         self.data.qpos[qpos_addr+3:qpos_addr+7] = quat
+        self.data.qvel[qvel_addr:qvel_addr+6] = 0  # Reset velocity to avoid shaking
 
-        # Zero velocities for freejoint (6 DOF)
-        self.data.qvel[qvel_addr:qvel_addr+6] = 0
+    def _hide_object(self, name):
+        self._move_object(name, self.hide_pos, [1, 0, 0, 0])
+        obj = self.objects[name]
+        self.model.geom_contype[obj["geom_id"]] = 0
+        self.model.geom_conaffinity[obj["geom_id"]] = 0
+        self.model.body_mass[obj["body_id"]] = 0.0
 
-    def _hide_object(self, obj_name):
-        self._move_object(obj_name, self.hide_pos, [1, 0, 0, 0])
-        state = self.objects[obj_name]
-        self.model.geom_contype[state["geom_id"]] = 0
-        self.model.geom_conaffinity[state["geom_id"]] = 0
-        self.model.body_mass[state["body_id"]] = 0.0
-
-def get_object_names_from_model(model, prefix="object"):
-    return [model.body(i).name for i in range(model.nbody) if model.body(i).name.startswith(prefix)]
+def get_object_names_from_model(model, prefix=""):
+    exclude = {"world", "table"}
+    return [model.body(i).name for i in range(model.nbody)
+            if model.body(i).name.startswith(prefix) and model.body(i).name not in exclude]

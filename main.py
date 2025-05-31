@@ -7,7 +7,7 @@ from object_manager import ObjectManager, get_object_names_from_model
 model = mujoco.MjModel.from_xml_path("scene.xml")
 data = mujoco.MjData(model)
 
-object_names = get_object_names_from_model(model, prefix="object")
+object_names = get_object_names_from_model(model, prefix="")
 manager = ObjectManager(model, data, object_names)
 
 # Get table and object heights dynamically
@@ -27,7 +27,7 @@ last_update_time = time.time()
 # Initial object list
 object_list = [
     {"name": "cup", "pos": [np.random.uniform(-0.4, 0.4), np.random.uniform(-0.4, 0.4), z_center], "quat": [1, 0, 0, 0]},
-    {"name": "block", "pos": [np.random.uniform(-0.4, 0.4), np.random.uniform(-0.4, 0.4), z_center], "quat": [1, 0, 0, 0]}
+    {"name": "plate", "pos": [np.random.uniform(-0.4, 0.4), np.random.uniform(-0.4, 0.4), z_center], "quat": [1, 0, 0, 0]}
 ]
 
 with mujoco.viewer.launch_passive(model, data) as viewer:
@@ -35,15 +35,14 @@ with mujoco.viewer.launch_passive(model, data) as viewer:
     viewer.cam.azimuth = -45
     viewer.cam.elevation = -45
     viewer.cam.distance = 2.0
+
     while viewer.is_running():
         current_time = time.time()
         if current_time - last_update_time >= update_interval:
-            # Update objects
             manager.update(object_list)
-            # Generate new random object list
             object_list = [
                 {"name": "cup", "pos": [np.random.uniform(-0.4, 0.4), np.random.uniform(-0.4, 0.4), z_center], "quat": [1, 0, 0, 0]},
-                {"name": "block", "pos": [np.random.uniform(-0.4, 0.4), np.random.uniform(-0.4, 0.4), z_center], "quat": [1, 0, 0, 0]}
+                {"name": "plate", "pos": [np.random.uniform(-0.4, 0.4), np.random.uniform(-0.4, 0.4), z_center], "quat": [1, 0, 0, 0]}
             ]
             last_update_time = current_time
 
