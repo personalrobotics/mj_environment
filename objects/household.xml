@@ -1,0 +1,42 @@
+<worldbody>
+  <body name="cup" pos="0 0 -1">
+    <joint type="free"/>
+    <geom type="cylinder" size="0.03 0.1" mass="0.2" friction="0.8 0.1 0.1" rgba="1 0 0 1"/>
+  </body>
+  <body name="plate" pos="0.1 0 -1">
+    <joint type="free"/>
+    <geom type="cylinder" size="0.03 0.1" mass="0.2" friction="0.8 0.1 0.1" rgba="0 1 0 1"/>
+  </body>
+  <body name="bowl" pos="-0.1 0 -1">
+    <joint type="free"/>
+    <geom type="cylinder" size="0.03 0.1" mass="0.2" friction="0.8 0.1 0.1" rgba="0 0 1 1"/>
+  </body>
+  <body name="fork" pos="0.2 0 -1">
+    <joint type="free"/>
+    <geom type="cylinder" size="0.03 0.1" mass="0.2" friction="0.8 0.1 0.1" rgba="1 1 0 1"/>
+  </body>
+  <body name="spoon" pos="-0.2 0 -1">
+    <joint type="free"/>
+    <geom type="cylinder" size="0.03 0.1" mass="0.2" friction="0.8 0.1 0.1" rgba="0 1 1 1"/>
+  </body>
+  <body name="knife" pos="0 0.1 -1">
+    <joint type="free"/>
+    <geom type="cylinder" size="0.03 0.1" mass="0.2" friction="0.8 0.1 0.1" rgba="1 0 1 1"/>
+  </body>
+  <body name="bottle" pos="0 -0.1 -1">
+    <joint type="free"/>
+    <geom type="cylinder" size="0.03 0.1" mass="0.2" friction="0.8 0.1 0.1" rgba="0.5 0.5 0.5 1"/>
+  </body>
+  <body name="can" pos="0.1 0.1 -1">
+    <joint type="free"/>
+    <geom type="cylinder" size="0.03 0.1" mass="0.2" friction="0.8 0.1 0.1" rgba="0.3 0.3 0.3 1"/>
+  </body>
+  <body name="jar" pos="-0.1 -0.1 -1">
+    <joint type="free"/>
+    <geom type="cylinder" size="0.03 0.1" mass="0.2" friction="0.8 0.1 0.1" rgba="0.2 0.2 0.6 1"/>
+  </body>
+  <body name="mug" pos="0 0 -1">
+    <joint type="free"/>
+    <geom type="cylinder" size="0.03 0.1" mass="0.2" friction="0.8 0.1 0.1" rgba="0.6 0.2 0.2 1"/>
+  </body>
+</worldbody>

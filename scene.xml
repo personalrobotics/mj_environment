@@ -1,26 +1,11 @@
-<mujoco model="dynamic_scene">
-  <option timestep="0.01" />
-  <visual>
-    <map znear="0.001" zfar="10.0"/>
-  </visual>
+<mujoco model="scene">
   <worldbody>
-    <camera name="topview" pos="0 0 2" euler="-90 0 0" fovy="0" />
-
-    <!-- Table (static object) -->
     <body name="table" pos="0 0 0">
       <geom type="box" size="0.5 0.5 0.02" rgba="0.6 0.6 0.6 1"/>
     </body>
-
-    <!-- Household objects (managed by ObjectManager) -->
-    <body name="cup" pos="0 0 0"><freejoint/><geom type="cylinder" size="0.03 0.1" rgba="1 0 0 1"/></body>
-    <body name="plate" pos="0 0 0"><freejoint/><geom type="cylinder" size="0.03 0.1" rgba="0 1 0 1"/></body>
-    <body name="bowl" pos="0 0 0"><freejoint/><geom type="cylinder" size="0.03 0.1" rgba="0 0 1 1"/></body>
-    <body name="fork" pos="0 0 0"><freejoint/><geom type="cylinder" size="0.03 0.1" rgba="1 1 0 1"/></body>
-    <body name="spoon" pos="0 0 0"><freejoint/><geom type="cylinder" size="0.03 0.1" rgba="0 1 1 1"/></body>
-    <body name="knife" pos="0 0 0"><freejoint/><geom type="cylinder" size="0.03 0.1" rgba="1 0 1 1"/></body>
-    <body name="bottle" pos="0 0 0"><freejoint/><geom type="cylinder" size="0.03 0.1" rgba="0.5 0.5 0.5 1"/></body>
-    <body name="can" pos="0 0 0"><freejoint/><geom type="cylinder" size="0.03 0.1" rgba="1 0.5 0 1"/></body>
-    <body name="jar" pos="0 0 0"><freejoint/><geom type="cylinder" size="0.03 0.1" rgba="0.5 0 1 1"/></body>
-    <body name="mug" pos="0 0 0"><freejoint/><geom type="cylinder" size="0.03 0.1" rgba="0 0.5 1 1"/></body>
+    <include file="objects/household.xml"/>
   </worldbody>
+  <visual>
+    <map znear="0.001" zfar="10.0"/>
+  </visual>
 </mujoco>

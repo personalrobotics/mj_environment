@@ -1,55 +1,67 @@
-import numpy as np
 import mujoco
+import numpy as np
+import xml.etree.ElementTree as ET
 
-class ObjectManager:
-    def __init__(self, model, data, object_names, hide_pos=[1000, 1000, 1000]):
-        self.model = model
-        self.data = data
-        self.hide_pos = hide_pos
+class Environment:
+    def __init__(self, scene_xml_path, household_xml_path):
+        self.model = mujoco.MjModel.from_xml_path(scene_xml_path)
+        self.data = mujoco.MjData(self.model)
+        self.hide_pos = [0, 0, -1]  # Below table
 
-        # Store body information
+        household_names = self._parse_household_names(household_xml_path)
         self.objects = {}
-        for name in object_names:
-            geom_id = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_GEOM, name)
-            body_id = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_BODY, name)
+        self._initialize_objects(household_names)
+
+    def _parse_household_names(self, household_xml_path):
+        tree = ET.parse(household_xml_path)
+        root = tree.getroot()
+        return [body.attrib['name'] for body in root.findall('body')]
+
+    def _initialize_objects(self, names):
+        for name in names:
+            geom_id = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_GEOM, name)
+            body_id = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_BODY, name)
             self.objects[name] = {
                 "geom_id": geom_id,
                 "body_id": body_id,
-                "contype": model.geom_contype[geom_id],
-                "conaffinity": model.geom_conaffinity[geom_id],
-                "mass": model.body_mass[body_id]
+                "contype": self.model.geom_contype[geom_id],
+                "conaffinity": self.model.geom_conaffinity[geom_id],
+                "mass": self.model.body_mass[body_id]
             }
             self._hide_object(name)
-
-    def add_object(self, name, pos, quat):
-        assert name in self.objects, f"Unknown object: {name}"
-        self._activate_object(name, pos, quat)
-        print(f"Added {name}")
-
-    def remove_object(self, name):
-        assert name in self.objects, f"Unknown object: {name}"
-        self._hide_object(name)
-        print(f"Removed {name}")
-
-    def move_object(self, name, pos, quat):
-        assert name in self.objects, f"Unknown object: {name}"
-        self._move_object(name, pos, quat)
 
     def update(self, object_list, persist=False):
         current_names = set()
         for obj in object_list:
             name = obj["name"]
             current_names.add(name)
-            status = obj.get("status", "active")
-            if status == "active":
-                self.add_object(name, obj["pos"], obj["quat"])
-            elif status == "inactive":
-                self.remove_object(name)
+            if name in self.objects:
+                self._activate_object(name, obj["pos"], obj["quat"])
 
         if not persist:
             for name in self.objects:
                 if name not in current_names:
-                    self.remove_object(name)
+                    self._hide_object(name)
+
+        mujoco.mj_forward(self.model, self.data)
+
+    def get_active_objects(self):
+        active = []
+        for name, obj in self.objects.items():
+            pos = self.data.qpos[self._get_qpos_addr(name):self._get_qpos_addr(name)+3]
+            if not np.allclose(pos, self.hide_pos, atol=1e-4):
+                active.append(name)
+        return active
+
+    def _get_qpos_addr(self, name):
+        body_id = self.objects[name]["body_id"]
+        joint_adr = self.model.body_jntadr[body_id]
+        return self.model.jnt_qposadr[joint_adr]
+
+    def _get_qvel_addr(self, name):
+        body_id = self.objects[name]["body_id"]
+        joint_adr = self.model.body_jntadr[body_id]
+        return self.model.jnt_dofadr[joint_adr]
 
     def _activate_object(self, name, pos, quat):
         obj = self.objects[name]
@@ -58,25 +70,16 @@ class ObjectManager:
         self.model.body_mass[obj["body_id"]] = obj["mass"]
         self._move_object(name, pos, quat)
 
-    def _move_object(self, name, pos, quat):
-        obj = self.objects[name]
-        body_id = obj["body_id"]
-        joint_adr = self.model.body_jntadr[body_id]
-        qpos_addr = self.model.jnt_qposadr[joint_adr]
-        qvel_addr = self.model.jnt_dofadr[joint_adr]
-
-        self.data.qpos[qpos_addr:qpos_addr+3] = pos
-        self.data.qpos[qpos_addr+3:qpos_addr+7] = quat
-        self.data.qvel[qvel_addr:qvel_addr+6] = 0  # Reset velocity to avoid shaking
-
     def _hide_object(self, name):
-        self._move_object(name, self.hide_pos, [1, 0, 0, 0])
         obj = self.objects[name]
         self.model.geom_contype[obj["geom_id"]] = 0
         self.model.geom_conaffinity[obj["geom_id"]] = 0
         self.model.body_mass[obj["body_id"]] = 0.0
+        self._move_object(name, self.hide_pos, [1, 0, 0, 0])
 
-def get_object_names_from_model(model, prefix=""):
-    exclude = {"world", "table"}
-    return [model.body(i).name for i in range(model.nbody)
-            if model.body(i).name.startswith(prefix) and model.body(i).name not in exclude]
+    def _move_object(self, name, pos, quat):
+        qpos_addr = self._get_qpos_addr(name)
+        qvel_addr = self._get_qvel_addr(name)
+        self.data.qpos[qpos_addr:qpos_addr+3] = pos
+        self.data.qpos[qpos_addr+3:qpos_addr+7] = quat
+        self.data.qvel[qvel_addr:qvel_addr+6] = 0.0
