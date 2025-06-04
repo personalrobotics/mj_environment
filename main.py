@@ -2,7 +2,7 @@ import mujoco
 import mujoco.viewer
 import numpy as np
 import time
-from object_manager import ObjectManager, get_object_names_from_model
+from environment import ObjectManager, get_object_names_from_model
 
 model = mujoco.MjModel.from_xml_path("scene.xml")
 data = mujoco.MjData(model)
