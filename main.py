@@ -4,6 +4,7 @@ import numpy as np
 import time
 from environment import Environment
 
+
 # Create environment
 env = Environment("scene.xml", "objects/household.xml")
 model = env.model
@@ -42,9 +43,17 @@ with mujoco.viewer.launch_passive(model, data) as viewer:
         env.update(object_list)
         mujoco.mj_forward(model, data)
 
-        object_list = [
-            {"name": "cup", "pos": [np.random.uniform(-0.4, 0.4), np.random.uniform(-0.4, 0.4), z_center], "quat": [1, 0, 0, 0]},
-            {"name": "plate", "pos": [np.random.uniform(-0.4, 0.4), np.random.uniform(-0.4, 0.4), z_center], "quat": [1, 0, 0, 0]}
+        fixed_name = "cup"
+        other_objects = [name for name in env.objects if name != fixed_name]
+        random_name = np.random.choice(other_objects)
+
+        object_list[:] = [
+            {"name": fixed_name, "pos": [np.random.uniform(-0.4, 0.4),
+                                         np.random.uniform(-0.4, 0.4),
+                                         z_center], "quat": [1, 0, 0, 0]},
+            {"name": random_name, "pos": [np.random.uniform(-0.4, 0.4),
+                                          np.random.uniform(-0.4, 0.4),
+                                          z_center], "quat": [1, 0, 0, 0]}
         ]
 
         viewer.sync()

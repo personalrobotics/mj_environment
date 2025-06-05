@@ -2,28 +2,30 @@ import numpy as np
 import mujoco
 import os
 import xml.etree.ElementTree as ET
-from typing import List, Dict, Optional
+import pickle
+from typing import List, Dict, Any
 
 class Environment:
     """
-    Manages MuJoCo simulation, including loading XML, updating object states, and controlling visibility.
+    A class to manage a MuJoCo simulation environment, including loading models,
+    manipulating objects, and updating simulation state.
     """
-    def __init__(self, scene_xml_path: str, objects_xml_path: str, hide_pos: Optional[List[float]] = None) -> None:
+    def __init__(self, scene_xml_path: str, objects_xml_path: str, hide_pos: List[float] = [0, 0, -1]):
         self.scene_xml_path = scene_xml_path
         self.objects_xml_path = objects_xml_path
-        self.hide_pos = hide_pos if hide_pos is not None else [0, 0, -1]
+        self.hide_pos = hide_pos
 
         try:
-            self.model = mujoco.MjModel.from_xml_path(scene_xml_path)
+            self.model: mujoco.MjModel = mujoco.MjModel.from_xml_path(scene_xml_path)
         except Exception as e:
             raise RuntimeError(f"Failed to load MuJoCo model from {scene_xml_path}: {e}")
 
         try:
-            self.data = mujoco.MjData(self.model)
+            self.data: mujoco.MjData = mujoco.MjData(self.model)
         except Exception as e:
             raise RuntimeError(f"Failed to create MuJoCo data from model: {e}")
 
-        self.objects: Dict[str, Dict[str, float]] = {}
+        self.objects: Dict[str, Dict[str, Any]] = {}
         self.active_objects: set[str] = set()
         object_names = self._parse_object_names(objects_xml_path)
 
@@ -50,23 +52,25 @@ class Environment:
         except Exception as e:
             raise RuntimeError(f"Failed to parse object names from {xml_path}: {e}")
 
-    def update(self, object_list: List[Dict[str, object]], persist: bool = False) -> None:
+    def update(self, object_list: List[Dict[str, Any]], persist: bool = False) -> None:
         current_names = set()
         for obj in object_list:
             name = obj["name"]
-            pos = obj["pos"]
-            quat = obj["quat"]
             current_names.add(name)
+            status = obj.get("status", "active")
 
-            if name in self.active_objects:
-                self.move_object(name, pos, quat)
-            else:
-                self.add_object(name, pos, quat)
+            if status == "active":
+                if name in self.active_objects:
+                    self.move_object(name, obj["pos"], obj["quat"])
+                else:
+                    self.add_object(name, obj["pos"], obj["quat"])
+            elif status == "inactive":
+                self.remove_object(name)
 
         if not persist:
-            for obj_name in list(self.active_objects):
-                if obj_name not in current_names:
-                    self.remove_object(obj_name)
+            for name in list(self.active_objects):
+                if name not in current_names:
+                    self.remove_object(name)
 
     def add_object(self, name: str, pos: List[float], quat: List[float]) -> None:
         if name not in self.objects:
@@ -115,3 +119,58 @@ class Environment:
         self.model.geom_contype[obj["geom_id"]] = 0
         self.model.geom_conaffinity[obj["geom_id"]] = 0
         self.model.body_mass[obj["body_id"]] = 0.0
+
+    def clone(self) -> mujoco.MjData:
+        """
+        Create a new MjData instance with identical state to the environment's current data.
+        """
+        data_clone = mujoco.MjData(self.model)
+        copy_data(data_clone, self.data, self.model)
+        return data_clone
+
+    def update_from_clone(self, other_data: mujoco.MjData) -> None:
+        """
+        Update this environment's internal data to match another MjData instance.
+        Raises ValueError if models do not match.
+        """
+        if other_data.model is not self.model:
+            raise ValueError("Cannot update: input data uses a different model.")
+        copy_data(self.data, other_data, self.model)
+
+    def pickle(self) -> bytes:
+        """
+        Serialize the current environment state (data) into bytes.
+        """
+        return pickle.dumps({
+            "qpos": self.data.qpos.copy(),
+            "qvel": self.data.qvel.copy(),
+            "act": self.data.act.copy(),
+            "ctrl": self.data.ctrl.copy(),
+            "qacc": self.data.qacc.copy(),
+            "qfrc_applied": self.data.qfrc_applied.copy()
+        })
+
+    def unpickle(self, data_bytes: bytes) -> None:
+        """
+        Deserialize bytes into the environment's current data.
+        """
+        state = pickle.loads(data_bytes)
+        np.copyto(self.data.qpos, state["qpos"])
+        np.copyto(self.data.qvel, state["qvel"])
+        np.copyto(self.data.act, state["act"])
+        np.copyto(self.data.ctrl, state["ctrl"])
+        np.copyto(self.data.qacc, state["qacc"])
+        np.copyto(self.data.qfrc_applied, state["qfrc_applied"])
+        mujoco.mj_forward(self.model, self.data)
+
+def copy_data(dst: mujoco.MjData, src: mujoco.MjData, model: mujoco.MjModel) -> None:
+    """
+    Copy simulation state from src to dst for the same model.
+    """
+    np.copyto(dst.qpos, src.qpos)
+    np.copyto(dst.qvel, src.qvel)
+    np.copyto(dst.act, src.act)
+    np.copyto(dst.ctrl, src.ctrl)
+    np.copyto(dst.qacc, src.qacc)
+    np.copyto(dst.qfrc_applied, src.qfrc_applied)
+    mujoco.mj_forward(model, dst)
