@@ -8,9 +8,6 @@ from environment import Environment
 env = Environment("scene.xml", "objects/household.xml")
 model = env.model
 data = env.data
-body_names = [mujoco.mj_id2name(model, mujoco.mjtObj.mjOBJ_BODY, i)
-              for i in range(model.nbody)]
-print("Bodies in model:", body_names)
 
 # Get table and object heights
 table_body_id = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_BODY, "table")
