@@ -1,5 +1,5 @@
 [project]
-name = "mj-object-manager"
+name = "mj_environment"
 version = "0.1.0"
 description = "Add your description here"
 readme = "README.md"
