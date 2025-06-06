@@ -71,6 +71,7 @@ class Environment:
             for name in list(self.active_objects):
                 if name not in current_names:
                     self.remove_object(name)
+        mujoco.mj_forward(self.model, self.data)
 
     def add_object(self, name: str, pos: List[float], quat: List[float]) -> None:
         if name not in self.objects:
@@ -78,6 +79,7 @@ class Environment:
         self._activate_object(name, pos, quat)
         self.active_objects.add(name)
         print(f"Added {name}")
+        mujoco.mj_forward(self.model, self.data)
 
     def remove_object(self, name: str) -> None:
         if name not in self.objects:
@@ -85,11 +87,13 @@ class Environment:
         self._hide_object(name)
         self.active_objects.discard(name)
         print(f"Removed {name}")
+        mujoco.mj_forward(self.model, self.data)
 
     def move_object(self, name: str, pos: List[float], quat: List[float]) -> None:
         if name not in self.objects:
             raise ValueError(f"Unknown object name: {name}")
         self._move_object(name, pos, quat)
+        mujoco.mj_forward(self.model, self.data)
 
     def get_active_object_names(self) -> List[str]:
         return list(self.active_objects)
@@ -136,6 +140,7 @@ class Environment:
         if other_data.model is not self.model:
             raise ValueError("Cannot update: input data uses a different model.")
         copy_data(self.data, other_data, self.model)
+        mujoco.mj_forward(self.model, self.data)
 
     def pickle(self) -> bytes:
         """
