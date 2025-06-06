@@ -2,7 +2,7 @@ import mujoco
 import mujoco.viewer
 import numpy as np
 import time
-from environment import Environment
+from mj_environment import Environment
 
 
 def object_update_demo():

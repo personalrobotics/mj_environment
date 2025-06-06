@@ -14,4 +14,5 @@ requires = ["setuptools>=61.0"]
 build-backend = "setuptools.build_meta"
 
 [tool.setuptools]
-py-modules = ["object_manager", "main"]
+py-modules = ["main"]
+packages = ["mj_environment"]
