@@ -1,8 +1,15 @@
 [project]
 name = "mj_environment"
 version = "0.1.0"
-description = "Add your description here"
+description = "A Python module for managing dynamic objects and full environments in MuJoCo"
 readme = "README.md"
+license = {text = "BSD-3-Clause"}
+authors = [
+    {name = "Siddhartha Srinivasa", email = "siddh@cs.washington.edu"}
+]
+maintainers = [
+    {name = "Siddhartha Srinivasa", email = "siddh@cs.washington.edu"}
+]
 requires-python = ">=3.9"
 dependencies = [
     "mujoco>=2.1.0",
