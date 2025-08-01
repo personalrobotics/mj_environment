@@ -4,15 +4,14 @@ A Python module for managing dynamic objects and full environments in MuJoCo. De
 
 ## ✨ Features
 
-- ✅ **Environment management abstraction**: `Environment` class encapsulates model, data, object access, and update logic.
-- 📦 **Dynamic object updates**: Add, move, or remove objects at runtime based on external input.
-- 📊 **Automatic placement**: Computes object heights from the scene for accurate table placement.
-- 🎨 **Custom visuals**: Color-coded common household objects.
-- 🗾️ **3D viewer**: Passive MuJoCo viewer integration with custom camera positioning.
+- ✅ **Environment management abstraction**: `Environment` class encapsulates MuJoCo model, data, and object management.
+- 📦 **Dynamic object manipulation**: Add, move, or remove objects at runtime with `add_object()`, `move_object()`, and `remove_object()` methods.
+- 🔄 **Batch object updates**: Update multiple objects simultaneously with the `update()` method.
+- 🎯 **Persistence control**: Configurable object persistence with the `persist` parameter in `update()`.
+- 📊 **State cloning**: Create independent copies of environment states with `clone()` and `update_from_clone()` methods.
+- 💾 **State serialization**: Serialize and deserialize environment states with `pickle()` and `unpickle()` methods.
 - 📂 **Modular scene files**: Scene and object definitions separated into XML components.
-- 🔄 **State cloning**: Create independent copies of environment states for planning.
-- 🧵 **Thread-safe updates**: Support for perception systems running in separate threads.
-- 🎯 **Persistence control**: Configurable object persistence for different perception models.
+- 🎨 **Object lifecycle management**: Automatic object hiding and activation with collision and mass property preservation.
 
 ## 📁 Directory Structure
 
@@ -44,9 +43,11 @@ mj_environment/
 
 **`Environment` Class** (`mj_environment/environment.py`)
 - Manages MuJoCo model and data instances
-- Handles dynamic object updates and state management
-- Provides object manipulation methods (add, move, remove)
-- Supports state cloning for planning scenarios
+- Provides individual object manipulation methods (`add_object`, `move_object`, `remove_object`)
+- Supports batch object updates with `update()` method
+- Implements state cloning and serialization (`clone`, `update_from_clone`, `pickle`, `unpickle`)
+- Handles object lifecycle with automatic hiding/activation
+- Preserves object properties (collision, mass) during state changes
 
 **Scene Configuration** (`scene.xml`)
 - Defines the base simulation environment
@@ -169,11 +170,11 @@ The base scene (`scene.xml`) includes:
 
 ## 📌 Technical Notes
 
-- **Object Hiding**: Objects are hidden when not in use by assigning zero mass and moving them far away
-- **State Preservation**: Geometry, collision, and mass properties are preserved per object and restored on activation
-- **Joint Assumptions**: Objects are assumed to have free joints and be defined in `household.xml`
-- **Thread Safety**: The `Environment` class supports concurrent updates from multiple threads
-- **Memory Management**: State cloning creates independent copies for planning without affecting the original
+- **Object Hiding**: Objects are hidden by setting mass to zero, disabling collisions, and moving to a configurable hide position
+- **State Preservation**: Collision types, affinities, and mass properties are preserved per object and restored on activation
+- **Joint Requirements**: Objects must have free joints and be defined in the objects XML file
+- **State Management**: The `clone()` method creates independent copies, while `pickle()`/`unpickle()` provide serialization
+- **Batch Updates**: The `update()` method supports both individual object updates and persistence control
 
 ## 🎯 Use Cases
 
@@ -184,14 +185,15 @@ The base scene (`scene.xml`) includes:
 
 ## 📣 Future Extensions
 
-- ✅ **Perception system integration**
-- ✅ **Planner environment cloning**
-- ✅ **Thread-safe updates**
+- ✅ **State cloning and serialization**
+- ✅ **Batch object updates with persistence control**
+- ✅ **Object lifecycle management**
 - ⏳ **Mesh-based object import** (URDF/STL)
 - ⏳ **Support for multiple object types**
 - ⏳ **Labeled logging and replay**
 - ⏳ **ROS2 integration**
 - ⏳ **Advanced physics properties**
+- ⏳ **Thread-safe concurrent updates**
 
 ## 👨‍💻 Authors
 
