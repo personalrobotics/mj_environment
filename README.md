@@ -188,10 +188,10 @@ The base scene (`scene.xml`) includes:
 - ✅ **State cloning and serialization**
 - ✅ **Batch object updates with persistence control**
 - ✅ **Object lifecycle management**
+- ⏳ **ROS serialization support** - ROS message types and services for environment state communication
 - ⏳ **Mesh-based object import** (URDF/STL)
 - ⏳ **Support for multiple object types**
 - ⏳ **Labeled logging and replay**
-- ⏳ **ROS2 integration**
 - ⏳ **Advanced physics properties**
 - ⏳ **Thread-safe concurrent updates**
 
