@@ -33,7 +33,6 @@ This approach provides the illusion of dynamic object creation while maintaining
 mj_environment/
 ├── 📄 README.md                    # This file - project documentation
 ├── 📄 pyproject.toml              # Python package configuration
-├── 📄 scene.xml                   # Base scene definition (table + object includes)
 ├── 📄 .gitignore                  # Git ignore patterns
 ├── 📄 .python-version             # Python version specification
 │
@@ -41,12 +40,14 @@ mj_environment/
 │   ├── 📄 __init__.py            # Package initialization
 │   └── 📄 environment.py         # Core Environment class implementation
 │
+├── 📁 data/                       # Scene and object data files
+│   ├── 📄 scene.xml              # Base scene definition (table + object includes)
+│   └── 📁 objects/               # Object definitions and configurations
+│       └── 📄 household.xml      # Household object collection (cups, plates, etc.)
+│
 ├── 📁 demos/                      # Example applications and demonstrations
 │   ├── 📄 object_update_demo.py  # Basic object manipulation demo
 │   └── 📄 perception_update_demo.py # Threaded perception system demo
-│
-├── 📁 objects/                    # Object definitions and configurations
-│   └── 📄 household.xml          # Household object collection (cups, plates, etc.)
 │
 └── 📁 mj_environment.egg-info/    # Package metadata (auto-generated)
 ```
@@ -64,12 +65,12 @@ mj_environment/
 - Handles object lifecycle through show/hide operations (not true add/remove)
 - Preserves object properties (collision, mass) during state changes
 
-**Scene Configuration** (`scene.xml`)
+**Scene Configuration** (`data/scene.xml`)
 - Defines the base simulation environment
 - Includes a table surface for object placement
 - References external object definitions via XML includes
 
-**Object Definitions** (`objects/household.xml`)
+**Object Definitions** (`data/objects/household.xml`)
 - Contains 10 common household objects (cup, plate, bowl, fork, spoon, knife, bottle, can, jar, mug)
 - Each object has unique visual properties (color, size, mass)
 - Objects use free joints for dynamic positioning
@@ -122,7 +123,7 @@ mj_environment/
 from mj_environment import Environment
 
 # Create environment with scene and object definitions
-env = Environment("scene.xml", "objects/household.xml")
+env = Environment("data/scene.xml", "data/objects/household.xml")
 model = env.model
 data = env.data
 ```
@@ -155,6 +156,8 @@ python demos/object_update_demo.py
 ```bash
 python demos/perception_update_demo.py
 ```
+
+> **Note**: The demos use the scene and object files from the `data/` directory.
 
 ### Controls
 

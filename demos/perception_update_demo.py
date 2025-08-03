@@ -22,7 +22,7 @@ def perception_thread(update_queue: queue.Queue, object_names: list[str], z_cent
 
 
 def perception_update_demo():
-    env = Environment("scene.xml", "objects/household.xml")
+    env = Environment("data/scene.xml", "data/objects/household.xml")
     model = env.model
     data = env.data
 

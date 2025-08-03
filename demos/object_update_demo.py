@@ -7,7 +7,7 @@ from mj_environment import Environment
 
 def object_update_demo():
     # Create environment
-    env = Environment("scene.xml", "objects/household.xml")
+    env = Environment("data/scene.xml", "data/objects/household.xml")
     model = env.model
     data = env.data
 
@@ -61,7 +61,7 @@ def object_update_demo():
 
 def cloning_demo():
     # 1. Initialize environment
-    env = Environment("scene.xml", "objects/household.xml")
+    env = Environment("data/scene.xml", "data/objects/household.xml")
     model = env.model
     data = env.data
 
