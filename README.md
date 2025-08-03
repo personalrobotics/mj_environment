@@ -2,6 +2,20 @@
 
 A Python module for managing dynamic objects and full environments in MuJoCo. Designed for simulation scenarios with perception-driven updates, planning, and visualization. This project demonstrates how to integrate dynamic object manipulation into a stable MuJoCo simulation pipeline.
 
+## 🎯 Problem Statement
+
+MuJoCo scenes are **immutable** - once a model is loaded, you cannot add new objects without reinitializing the entire simulation via XML. This limitation makes it impossible to dynamically add objects during runtime, which is essential for robotics applications where objects appear and disappear based on perception or user input.
+
+## 💡 Solution: Pre-initialization with Dynamic Activation
+
+The `Environment` class solves this problem by:
+1. **Pre-initializing all potential objects** at startup from XML definitions
+2. **Hiding unused objects** by setting their mass to zero and disabling collisions
+3. **Activating objects on-demand** by restoring their properties and positioning them
+4. **Managing object lifecycle** through show/hide operations rather than add/remove
+
+This approach provides the illusion of dynamic object creation while maintaining MuJoCo's performance and stability.
+
 ## ✨ Features
 
 - ✅ **Environment management abstraction**: `Environment` class encapsulates MuJoCo model, data, and object management.
@@ -42,11 +56,12 @@ mj_environment/
 ### Core Components
 
 **`Environment` Class** (`mj_environment/environment.py`)
-- Manages MuJoCo model and data instances
+- **Core Innovation**: Solves MuJoCo's immutability problem through pre-initialization
+- Manages MuJoCo model and data instances with all objects pre-loaded
 - Provides individual object manipulation methods (`add_object`, `move_object`, `remove_object`)
 - Supports batch object updates with `update()` method
 - Implements state cloning and serialization (`clone`, `update_from_clone`, `pickle`, `unpickle`)
-- Handles object lifecycle with automatic hiding/activation
+- Handles object lifecycle through show/hide operations (not true add/remove)
 - Preserves object properties (collision, mass) during state changes
 
 **Scene Configuration** (`scene.xml`)
@@ -170,6 +185,8 @@ The base scene (`scene.xml`) includes:
 
 ## 📌 Technical Notes
 
+- **MuJoCo Limitation**: Scenes are immutable - objects cannot be truly added/removed after initialization
+- **Object Lifecycle**: "Adding" objects actually activates pre-initialized objects; "removing" hides them
 - **Object Hiding**: Objects are hidden by setting mass to zero, disabling collisions, and moving to a configurable hide position
 - **State Preservation**: Collision types, affinities, and mass properties are preserved per object and restored on activation
 - **Joint Requirements**: Objects must have free joints and be defined in the objects XML file
@@ -182,6 +199,15 @@ The base scene (`scene.xml`) includes:
 - **Perception Testing**: Simulating vision systems with changing object configurations
 - **Planning Research**: State cloning for motion planning algorithms
 - **Educational**: Learning MuJoCo integration and object management
+
+## 🔄 Workflow
+
+1. **Initialization**: All potential objects are loaded from XML and hidden
+2. **Runtime**: Objects are "added" by activating them and positioning them
+3. **Updates**: Objects are moved or "removed" (hidden) as needed
+4. **State Management**: Environment states can be cloned or serialized for planning
+
+This workflow provides the flexibility of dynamic object management while respecting MuJoCo's architectural constraints.
 
 ## 📣 Future Extensions
 
