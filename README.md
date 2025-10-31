@@ -18,14 +18,15 @@ This approach provides the illusion of dynamic object creation while maintaining
 
 ## ✨ Features
 
-- ✅ **Environment management abstraction**: `Environment` class encapsulates MuJoCo model, data, and object management.
-- 📦 **Dynamic object manipulation**: Add, move, or remove objects at runtime with `add_object()`, `move_object()`, and `remove_object()` methods.
-- 🔄 **Batch object updates**: Update multiple objects simultaneously with the `update()` method.
-- 🎯 **Persistence control**: Configurable object persistence with the `persist` parameter in `update()`.
-- 📊 **State cloning**: Create independent copies of environment states with `clone()` and `update_from_clone()` methods.
-- 💾 **State serialization**: Serialize and deserialize environment states with `pickle()` and `unpickle()` methods.
-- 📂 **Modular scene files**: Scene and object definitions separated into XML components.
-- 🎨 **Object lifecycle management**: Automatic object hiding and activation with collision and mass property preservation.
+- ✅ **Modular Architecture**: Clean separation of concerns with `Simulation`, `ObjectRegistry`, and `StateIO` components
+- ✅ **Environment management abstraction**: `Environment` class orchestrates MuJoCo model, data, and object management
+- 📦 **Dynamic object manipulation**: Activate, move, and hide objects at runtime through the `ObjectRegistry`
+- 🔄 **Batch object updates**: Update multiple objects simultaneously with the `update()` method
+- 🎯 **Persistence control**: Configurable object persistence with the `persist` parameter in `update()`
+- 📊 **State cloning**: Create independent copies of environment states with `clone_data()` method
+- 💾 **State serialization**: Serialize and deserialize environment states to YAML with `StateIO`
+- 📂 **Modular scene files**: Scene and object definitions separated into XML components
+- 🎨 **Object lifecycle management**: Automatic object hiding and activation with collision and mass property preservation
 
 ## 📁 Directory Structure
 
@@ -38,7 +39,10 @@ mj_environment/
 │
 ├── 📁 mj_environment/             # Main package directory
 │   ├── 📄 __init__.py            # Package initialization
-│   └── 📄 environment.py         # Core Environment class implementation
+│   ├── 📄 environment.py         # High-level Environment orchestrator
+│   ├── 📄 simulation.py          # MuJoCo simulation wrapper
+│   ├── 📄 object_registry.py     # Object lifecycle management
+│   └── 📄 state_io.py            # State serialization (YAML)
 │
 ├── 📁 data/                       # Scene and object data files
 │   ├── 📄 scene.xml              # Base scene definition (table + object includes)
@@ -57,13 +61,26 @@ mj_environment/
 ### Core Components
 
 **`Environment` Class** (`mj_environment/environment.py`)
-- **Core Innovation**: Solves MuJoCo's immutability problem through pre-initialization
-- Manages MuJoCo model and data instances with all objects pre-loaded
-- Provides individual object manipulation methods (`add_object`, `move_object`, `remove_object`)
-- Supports batch object updates with `update()` method
-- Implements state cloning and serialization (`clone`, `update_from_clone`, `pickle`, `unpickle`)
-- Handles object lifecycle through show/hide operations (not true add/remove)
-- Preserves object properties (collision, mass) during state changes
+- **High-level orchestrator** that combines `Simulation`, `ObjectRegistry`, and `StateIO`
+- Coordinates MuJoCo model, data, and object lifecycle management
+- Provides unified `update()` interface for batch object updates
+- Delegates to specialized components for simulation, object management, and I/O
+
+**`Simulation` Class** (`mj_environment/simulation.py`)
+- Wraps MuJoCo model and data initialization
+- Handles physics stepping, reset, and forward integration
+- Provides `clone_data()` for independent state copies
+
+**`ObjectRegistry` Class** (`mj_environment/object_registry.py`)
+- Manages object lifecycle: activation, hiding, and positioning
+- Validates object names and preserves properties (collision, mass, geometry)
+- Handles object metadata and active state tracking
+- **Core Innovation**: Solves MuJoCo's immutability through pre-initialization
+
+**`StateIO` Class** (`mj_environment/state_io.py`)
+- Serializes environment states to YAML format
+- Preserves object positions, velocities, and active objects
+- Supports saving and loading environment checkpoints
 
 **Scene Configuration** (`data/scene.xml`)
 - Defines the base simulation environment
@@ -78,13 +95,14 @@ mj_environment/
 ### Demo Applications
 
 **Object Update Demo** (`demos/object_update_demo.py`)
-- Demonstrates basic object manipulation
+- Demonstrates basic object manipulation through `ObjectRegistry`
 - Shows random object placement and movement
-- Includes state cloning functionality for planning
+- Includes state cloning with `clone_data()` method
+- Demonstrates YAML serialization with `StateIO`
 
 **Perception Update Demo** (`demos/perception_update_demo.py`)
 - Simulates a perception system with threaded updates
-- Demonstrates thread-safe environment updates
+- Demonstrates concurrent environment updates
 - Shows configurable object persistence modes
 
 ## 🛠️ Requirements
@@ -92,6 +110,7 @@ mj_environment/
 - **Python** ≥ 3.9  
 - **[MuJoCo](https://mujoco.readthedocs.io/en/stable/)** ≥ 2.1.0
 - **NumPy** for numerical operations
+- **PyYAML** for state serialization
 - **`uv`** for dependency management (optional but recommended)
 
 ## 🚀 Installation
@@ -124,25 +143,31 @@ from mj_environment import Environment
 
 # Create environment with scene and object definitions
 env = Environment("data/scene.xml", "data/objects/household.xml")
-model = env.model
-data = env.data
+
+# Access MuJoCo model and data through Simulation
+model = env.sim.model
+data = env.sim.data
 ```
 
 ### Object Manipulation
 
 ```python
-# Update objects in the scene
+# Batch update objects in the scene
 object_list = [
     {"name": "cup", "pos": [0.1, 0.1, 0.41], "quat": [1, 0, 0, 0]},
     {"name": "plate", "pos": [-0.1, -0.1, 0.41], "quat": [1, 0, 0, 0]}
 ]
 env.update(object_list)
 
-# Move individual objects
-env.move_object("cup", [0.3, 0.3, 0.41], [1, 0, 0, 0])
+# Move individual objects through ObjectRegistry
+env.registry.move("cup", [0.3, 0.3, 0.41], [1, 0, 0, 0])
 
 # Clone environment state for planning
-cloned_data = env.clone()
+cloned_data = env.sim.clone_data()
+
+# Save and load state with StateIO
+env.state_io.save(env.sim.model, env.sim.data, env.registry.active_objects, "checkpoint.yaml")
+active_objects = env.state_io.load(env.sim.model, env.sim.data, "checkpoint.yaml")
 ```
 
 ### Running Demos
@@ -193,8 +218,9 @@ The base scene (`scene.xml`) includes:
 - **Object Hiding**: Objects are hidden by setting mass to zero, disabling collisions, and moving to a configurable hide position
 - **State Preservation**: Collision types, affinities, and mass properties are preserved per object and restored on activation
 - **Joint Requirements**: Objects must have free joints and be defined in the objects XML file
-- **State Management**: The `clone()` method creates independent copies, while `pickle()`/`unpickle()` provide serialization
+- **State Management**: The `clone_data()` method creates independent copies, while `StateIO` provides YAML serialization
 - **Batch Updates**: The `update()` method supports both individual object updates and persistence control
+- **Modular Design**: Clean separation between simulation, object management, and I/O concerns
 
 ## 🎯 Use Cases
 
@@ -214,9 +240,10 @@ This workflow provides the flexibility of dynamic object management while respec
 
 ## 📣 Future Extensions
 
-- ✅ **State cloning and serialization**
-- ✅ **Batch object updates with persistence control**
-- ✅ **Object lifecycle management**
+- ✅ **Modular architecture** with separated components
+- ✅ **State cloning and serialization** via `clone_data()` and `StateIO`
+- ✅ **Batch object updates** with persistence control
+- ✅ **Object lifecycle management** with validation
 - ⏳ **ROS serialization support** - ROS message types and services for environment state communication
 - ⏳ **Mesh-based object import** (URDF/STL)
 - ⏳ **Support for multiple object types**
