@@ -1,27 +1,45 @@
+"""
+Demonstrates integration with a simulated perception system running in a separate thread.
+Shows how Environment can handle concurrent updates safely.
+"""
+
 import mujoco
 import mujoco.viewer
 import numpy as np
 import threading
 import queue
 import time
-from mj_environment.environment import Environment
+from mj_environment import Environment
 
 
-def perception_thread(update_queue: queue.Queue, object_names: list[str], z_center: float, interval: float = 1.0) -> None:
+def perception_thread(
+    update_queue: queue.Queue,
+    object_names: list[str],
+    z_center: float,
+    interval: float = 1.0,
+) -> None:
     """
     Simulates a perception system that periodically detects random objects and sends updates.
+
+    In a real system, this would interface with a vision pipeline that detects objects
+    in the environment and publishes their estimated poses.
     """
     while True:
         detected = []
+        # Simulate detecting 2 random objects
         for name in np.random.choice(object_names, size=2, replace=False):
-            pos = [np.random.uniform(-0.4, 0.4), np.random.uniform(-0.4, 0.4), z_center]
-            quat = [1, 0, 0, 0]
-            detected.append({"name": name, "pos": pos, "quat": quat})
+            pos = [
+                np.random.uniform(-0.4, 0.4),
+                np.random.uniform(-0.4, 0.4),
+                z_center,
+            ]
+            detected.append({"name": name, "pos": pos, "quat": [1, 0, 0, 0]})
         update_queue.put(detected)
         time.sleep(interval)
 
 
 def perception_update_demo():
+    """Run perception update demo with threaded updates."""
     env = Environment("data/scene.xml", "data/objects/household.xml")
     model = env.sim.model
     data = env.sim.data
@@ -50,20 +68,27 @@ def perception_update_demo():
     perception.start()
 
     with mujoco.viewer.launch_passive(model, data) as viewer:
+        # Configure camera
         viewer.cam.lookat[:] = [0, 0, 0]
         viewer.cam.azimuth = -45
         viewer.cam.elevation = -45
         viewer.cam.distance = 2.0
 
+        print("Starting perception simulation...")
+        print("persist=False: Objects disappear if not continuously detected")
+        print("Press Esc to exit")
+
         while viewer.is_running():
+            # Process all pending perception updates
             try:
                 while not update_queue.empty():
                     perception_update = update_queue.get_nowait()
-                    # persist=False simulates a perception system that only maintains objects in the scene if they are continuously re-detected.
-                    # persist=True simulates a perception system that maintains objects in the scene even if they are not detected.
+                    # persist=False: Only objects in current detection are kept
+                    # persist=True: Objects persist even if not detected
                     env.update(perception_update, persist=False)
             except queue.Empty:
                 pass
+
             viewer.sync()
             time.sleep(0.1)
 
