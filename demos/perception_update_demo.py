@@ -4,7 +4,7 @@ import numpy as np
 import threading
 import queue
 import time
-from mj_environment import Environment
+from mj_environment.environment import Environment
 
 
 def perception_thread(update_queue: queue.Queue, object_names: list[str], z_center: float, interval: float = 1.0) -> None:
@@ -23,15 +23,15 @@ def perception_thread(update_queue: queue.Queue, object_names: list[str], z_cent
 
 def perception_update_demo():
     env = Environment("data/scene.xml", "data/objects/household.xml")
-    model = env.model
-    data = env.data
+    model = env.sim.model
+    data = env.sim.data
 
     table_body_id = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_BODY, "table")
     table_geom_id = model.body_geomadr[table_body_id]
     table_size = model.geom_size[table_geom_id]
     table_height = table_size[2]
 
-    sample_name = next(iter(env.objects))
+    sample_name = next(iter(env.registry.objects))
     object_body_id = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_BODY, sample_name)
     object_geom_id = model.body_geomadr[object_body_id]
     object_size = model.geom_size[object_geom_id]
@@ -41,7 +41,7 @@ def perception_update_demo():
     update_queue = queue.Queue()
 
     # Start the perception thread
-    object_names = list(env.objects.keys())
+    object_names = list(env.registry.objects.keys())
     perception = threading.Thread(
         target=perception_thread,
         args=(update_queue, object_names, z_center),
