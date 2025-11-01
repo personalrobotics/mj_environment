@@ -4,6 +4,7 @@ Demonstration of the AssetManager and its YAML-driven asset pipeline.
 
 import os
 import mujoco
+import mujoco.viewer
 from mj_environment.asset_manager import AssetManager
 
 
@@ -62,7 +63,6 @@ def main():
     print("[Demo] Launching viewer for visual inspection (press ESC to quit)...")
     data = mujoco.MjData(cup_model)
     try:
-        import mujoco.viewer
         with mujoco.viewer.launch_passive(cup_model, data) as viewer:
             viewer.cam.lookat[:] = [0, 0, 0]
             viewer.cam.distance = 0.5
