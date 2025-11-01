@@ -1,0 +1,5 @@
+name: mug
+category: [kitchenware, drinkware, ceramic, handle]
+mass: 0.35
+color: [0.8, 0.8, 0.95, 1.0]
+scale: 1.0

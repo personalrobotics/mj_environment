@@ -1,0 +1,5 @@
+name: plate
+category: [kitchenware, dishware, ceramic]
+mass: 0.4
+color: [1.0, 0.95, 0.9, 1.0]
+scale: 1.0

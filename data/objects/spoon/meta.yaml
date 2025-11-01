@@ -1,0 +1,5 @@
+name: spoon
+category: [utensil, metal, graspable]
+mass: 0.1
+color: [0.8, 0.8, 0.8, 1.0]
+scale: 1.0

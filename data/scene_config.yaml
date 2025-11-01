@@ -1,0 +1,18 @@
+# Defines how many instances of each object type to preload in the simulation.
+# The ObjectRegistry uses these counts to preinitialize hidden instances.
+
+objects:
+  cup:
+    count: 3
+  plate:
+    count: 2
+  bowl:
+    count: 2
+  mug:
+    count: 2
+  fork:
+    count: 4
+  spoon:
+    count: 4
+  knife:
+    count: 4

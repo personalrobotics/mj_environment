@@ -1,0 +1,5 @@
+name: cup
+category: [kitchenware, drinkware, ceramic]
+mass: 0.25
+color: [0.9, 0.9, 1.0, 1.0]
+scale: 1.0
