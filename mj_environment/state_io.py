@@ -3,7 +3,6 @@
 import yaml
 import numpy as np
 import mujoco
-from typing import Set
 
 
 class StateIO:
@@ -11,17 +10,25 @@ class StateIO:
 
     SCHEMA_VERSION = 1
 
-    def save(self, model, data, active_objects: Set[str], path: str):
+    def save(self, model, data, active_objects, path: str):
+        """Save simulation state. active_objects can be dict or set."""
+        # Convert to dict if needed
+        if isinstance(active_objects, dict):
+            active_dict = active_objects
+        else:
+            active_dict = {name: True for name in active_objects}
+        
         state = {
             "schema_version": self.SCHEMA_VERSION,
             "qpos": data.qpos.tolist(),
             "qvel": data.qvel.tolist(),
-            "active_objects": list(active_objects),
+            "active_objects": active_dict,
         }
         with open(path, "w") as f:
             yaml.safe_dump(state, f)
 
-    def load(self, model, data, path: str) -> Set[str]:
+    def load(self, model, data, path: str):
+        """Load simulation state. Returns dict of active objects."""
         with open(path, "r") as f:
             state = yaml.safe_load(f)
 
@@ -37,4 +44,9 @@ class StateIO:
         data.qpos[:] = qpos
         data.qvel[:] = qvel
         mujoco.mj_forward(model, data)
-        return set(state.get("active_objects", []))
+        
+        # Return as dict
+        active_list = state.get("active_objects", [])
+        if isinstance(active_list, dict):
+            return active_list
+        return {name: True for name in active_list}

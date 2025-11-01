@@ -40,16 +40,21 @@ def perception_thread(
 
 def perception_update_demo():
     """Run perception update demo with threaded updates."""
-    env = Environment("data/scene.xml", "data/objects/household.xml")
-    model = env.sim.model
-    data = env.sim.data
+    env = Environment(
+        base_scene_xml="data/scene.xml",
+        objects_dir="data/objects",
+        scene_config_yaml="data/scene_config.yaml",
+    )
+    model = env.model
+    data = env.data
 
     table_body_id = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_BODY, "table")
     table_geom_id = model.body_geomadr[table_body_id]
     table_size = model.geom_size[table_geom_id]
     table_height = table_size[2]
 
-    sample_name = next(iter(env.registry.objects))
+    sample_type = next(iter(env.registry.objects))
+    sample_name = env.registry.objects[sample_type]["instances"][0]
     object_body_id = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_BODY, sample_name)
     object_geom_id = model.body_geomadr[object_body_id]
     object_size = model.geom_size[object_geom_id]

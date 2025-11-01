@@ -1,41 +1,56 @@
-"""Wrapper around MuJoCo simulation lifecycle."""
+"""Simulation — thin wrapper around MuJoCo model and data with cloning support."""
 
 import mujoco
 import numpy as np
-import time
-from typing import Optional
 
 
 class Simulation:
-    """Encapsulates MuJoCo model, data, and stepping."""
+    """Wraps MuJoCo model and data for stepping, resetting, and cloning."""
 
-    def __init__(self, scene_xml: str):
-        self.model = mujoco.MjModel.from_xml_path(scene_xml)
-        self.data = mujoco.MjData(self.model)
+    def __init__(self, model: mujoco.MjModel, data: mujoco.MjData = None):
+        self.model = model
+        self.data = data if data is not None else mujoco.MjData(model)
 
-    def step(self, ctrl: Optional[np.ndarray] = None):
+    # ------------------------------------------------------------------
+    # Basic stepping
+    # ------------------------------------------------------------------
+    def step(self, ctrl=None):
+        """Advance simulation one step with optional control input."""
         if ctrl is not None:
-            self.data.ctrl[:] = ctrl
+            np.copyto(self.data.ctrl, ctrl)
         mujoco.mj_step(self.model, self.data)
 
     def reset(self):
+        """Reset the simulation to its initial state."""
         mujoco.mj_resetData(self.model, self.data)
 
-    def forward(self):
-        mujoco.mj_forward(self.model, self.data)
-
+    # ------------------------------------------------------------------
+    # ✅ Cloning / State Copying
+    # ------------------------------------------------------------------
     def clone_data(self) -> mujoco.MjData:
-        """Return a deep copy of current MjData."""
+        """
+        Create a deep clone of the current simulation state.
+
+        Returns:
+            mujoco.MjData: A new data object with identical simulation state.
+        """
         clone = mujoco.MjData(self.model)
-        np.copyto(clone.qpos, self.data.qpos)
-        np.copyto(clone.qvel, self.data.qvel)
-        mujoco.mj_forward(self.model, clone)
+        self.copy_data(clone, self.data)
         return clone
 
-    def simulate(self, duration: float, realtime: bool = False):
-        """Run the simulation for a given duration."""
-        steps = int(duration / self.model.opt.timestep)
-        for _ in range(steps):
-            mujoco.mj_step(self.model, self.data)
-            if realtime:
-                time.sleep(self.model.opt.timestep)
+    @staticmethod
+    def copy_data(dst: mujoco.MjData, src: mujoco.MjData):
+        """
+        Copy all MuJoCo state arrays between two MjData objects.
+
+        Args:
+            dst: Destination MjData (already constructed for the same model)
+            src: Source MjData to copy from
+        """
+        np.copyto(dst.qpos, src.qpos)
+        np.copyto(dst.qvel, src.qvel)
+        np.copyto(dst.act, src.act)
+        np.copyto(dst.ctrl, src.ctrl)
+        np.copyto(dst.qacc, src.qacc)
+        np.copyto(dst.qfrc_applied, src.qfrc_applied)
+        mujoco.mj_forward(dst.model, dst)
