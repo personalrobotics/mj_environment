@@ -1,0 +1,8 @@
+<mujoco model="cup">
+  <worldbody>
+    <body name="cup" pos="0 0 0.05">
+      <freejoint/>
+      <geom type="cylinder" size="0.03 0.05" rgba="0.9 0.9 1.0 1.0" mass="0.25"/>
+    </body>
+  </worldbody>
+</mujoco>

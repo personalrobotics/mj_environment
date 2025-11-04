@@ -1,0 +1,8 @@
+<mujoco model="knife">
+  <worldbody>
+    <body name="knife" pos="0 0 0.05">
+      <freejoint/>
+      <geom type="box" size="0.1 0.01 0.002" rgba="0.7 0.7 0.7 1.0" mass="0.15"/>
+    </body>
+  </worldbody>
+</mujoco>

@@ -1,10 +1,17 @@
 <mujoco model="scene">
+  <compiler angle="radian" coordinate="local"/>
+  <option gravity="0 0 -9.81" integrator="RK4" timestep="0.002"/>
+
+  <asset>
+    <texture type="skybox" builtin="gradient" rgb1=".4 .5 .6" rgb2="0 0 0" width="800" height="800"/>
+  </asset>
+
   <worldbody>
     <body name="table" pos="0 0 0">
       <geom type="box" size="0.5 0.5 0.02" rgba="0.6 0.6 0.6 1"/>
     </body>
-    <include file="objects/household.xml"/>
   </worldbody>
+
   <visual>
     <map znear="0.001" zfar="10.0"/>
   </visual>

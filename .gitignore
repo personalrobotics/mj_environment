@@ -36,3 +36,8 @@ ENV/
 # OS
 .DS_Store
 Thumbs.db
+
+# Generated files (but allow data config files)
+state.yaml
+*.state.yaml
+data/state_snapshot.yaml

@@ -1,3 +1,8 @@
+"""
+Demonstrates integration with a simulated perception system running in a separate thread.
+Shows how Environment can handle concurrent updates safely.
+"""
+
 import mujoco
 import mujoco.viewer
 import numpy as np
@@ -7,22 +12,39 @@ import time
 from mj_environment import Environment
 
 
-def perception_thread(update_queue: queue.Queue, object_names: list[str], z_center: float, interval: float = 1.0) -> None:
+def perception_thread(
+    update_queue: queue.Queue,
+    object_names: list[str],
+    z_center: float,
+    interval: float = 1.0,
+) -> None:
     """
     Simulates a perception system that periodically detects random objects and sends updates.
+
+    In a real system, this would interface with a vision pipeline that detects objects
+    in the environment and publishes their estimated poses.
     """
     while True:
         detected = []
+        # Simulate detecting 2 random objects
         for name in np.random.choice(object_names, size=2, replace=False):
-            pos = [np.random.uniform(-0.4, 0.4), np.random.uniform(-0.4, 0.4), z_center]
-            quat = [1, 0, 0, 0]
-            detected.append({"name": name, "pos": pos, "quat": quat})
+            pos = [
+                np.random.uniform(-0.4, 0.4),
+                np.random.uniform(-0.4, 0.4),
+                z_center,
+            ]
+            detected.append({"name": name, "pos": pos, "quat": [1, 0, 0, 0]})
         update_queue.put(detected)
         time.sleep(interval)
 
 
 def perception_update_demo():
-    env = Environment("data/scene.xml", "data/objects/household.xml")
+    """Run perception update demo with threaded updates."""
+    env = Environment(
+        base_scene_xml="data/scene.xml",
+        objects_dir="data/objects",
+        scene_config_yaml="data/scene_config.yaml",
+    )
     model = env.model
     data = env.data
 
@@ -31,7 +53,8 @@ def perception_update_demo():
     table_size = model.geom_size[table_geom_id]
     table_height = table_size[2]
 
-    sample_name = next(iter(env.objects))
+    sample_type = next(iter(env.registry.objects))
+    sample_name = env.registry.objects[sample_type]["instances"][0]
     object_body_id = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_BODY, sample_name)
     object_geom_id = model.body_geomadr[object_body_id]
     object_size = model.geom_size[object_geom_id]
@@ -41,7 +64,7 @@ def perception_update_demo():
     update_queue = queue.Queue()
 
     # Start the perception thread
-    object_names = list(env.objects.keys())
+    object_names = list(env.registry.objects.keys())
     perception = threading.Thread(
         target=perception_thread,
         args=(update_queue, object_names, z_center),
@@ -50,20 +73,27 @@ def perception_update_demo():
     perception.start()
 
     with mujoco.viewer.launch_passive(model, data) as viewer:
+        # Configure camera
         viewer.cam.lookat[:] = [0, 0, 0]
         viewer.cam.azimuth = -45
         viewer.cam.elevation = -45
         viewer.cam.distance = 2.0
 
+        print("Starting perception simulation...")
+        print("persist=False: Objects disappear if not continuously detected")
+        print("Press Esc to exit")
+
         while viewer.is_running():
+            # Process all pending perception updates
             try:
                 while not update_queue.empty():
                     perception_update = update_queue.get_nowait()
-                    # persist=False simulates a perception system that only maintains objects in the scene if they are continuously re-detected.
-                    # persist=True simulates a perception system that maintains objects in the scene even if they are not detected.
+                    # persist=False: Only objects in current detection are kept
+                    # persist=True: Objects persist even if not detected
                     env.update(perception_update, persist=False)
             except queue.Empty:
                 pass
+
             viewer.sync()
             time.sleep(0.1)
 
