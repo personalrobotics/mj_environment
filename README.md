@@ -20,11 +20,11 @@ At the same time, MuJoCo assets are often **scattered and inconsistent**, mixing
 ```mermaid
 graph TD
     A[scene.xml] -->|Base world| E(Environment)
-    B[scene_config.yaml] -->|Inventory (counts)| E
+    B[scene_config.yaml] -->|Inventory counts| E
     C[data/objects/*] -->|Per-object YAML + XML| D[AssetManager]
     D -->|Metadata + XML paths| F[ObjectRegistry]
     E -->|Physics step| G[Simulation]
-    F -->|Show / Hide via RGBA| G
+    F -->|Show/Hide via RGBA| G
     G -->|Render| H[MuJoCo Viewer]
 ```
 
