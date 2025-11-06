@@ -2,13 +2,16 @@
 
 import mujoco
 import yaml
+import numpy as np
+import re
 from xml.etree.ElementTree import Element, SubElement, tostring, parse as ETparse
 from xml.dom import minidom
 from typing import List, Dict, Any
 
+import os
 from .simulation import Simulation
 from .object_registry import ObjectRegistry
-from .asset_manager import AssetManager
+from asset_manager import AssetManager
 from .state_io import StateIO
 
 
@@ -49,9 +52,15 @@ class Environment:
         # ------------------------------------------------------------------
         self.model = mujoco.MjModel.from_xml_string(xml_string)
         self.data = mujoco.MjData(self.model)
+        
+        # ------------------------------------------------------------------
+        # 4️⃣ Apply overrides from meta.yaml (mass, color, scale)
+        #    These take priority over values in XML files
+        # ------------------------------------------------------------------
+        self._apply_metadata_overrides(scene_config_yaml)
 
         # ------------------------------------------------------------------
-        # 4️⃣ Initialize Simulation + Object Registry
+        # 5️⃣ Initialize Simulation + Object Registry
         # ------------------------------------------------------------------
         self.sim = Simulation(self.model, self.data)
         self.registry = ObjectRegistry(
@@ -87,12 +96,22 @@ class Environment:
 
         for obj_type, entry in scene_cfg.items():
             count = entry.get("count", 1)
-            if not self.asset_manager.has(obj_type):
-                print(f"[WARN] Unknown asset '{obj_type}', skipping.")
+            if obj_type not in self.asset_manager.list():
+                if self.verbose:
+                    print(f"[WARN] Unknown asset '{obj_type}', skipping.")
                 continue
 
-            meta = self.asset_manager.get(obj_type)
-            xml_path = meta["xml_path"]
+            # Get XML path from AssetManager - relies on mujoco.xml_path in meta.yaml
+            xml_path = self.asset_manager.get_path(obj_type, "mujoco")
+            if xml_path is None:
+                if self.verbose:
+                    print(f"[WARN] No XML path found for '{obj_type}' with simulator 'mujoco', skipping.")
+                continue
+            
+            if not os.path.exists(xml_path):
+                if self.verbose:
+                    print(f"[WARN] XML file not found for '{obj_type}' at {xml_path}, skipping.")
+                continue
 
             # Parse object XML to extract worldbody contents
             obj_tree = ETparse(xml_path)
@@ -119,9 +138,97 @@ class Environment:
         xml_bytes = tostring(mujoco_el, "utf-8")
         return minidom.parseString(xml_bytes).toprettyxml(indent="  ")
 
+    # ------------------------------------------------------------------
+    # Metadata Overrides
+    # ------------------------------------------------------------------
+    def _apply_metadata_overrides(self, scene_config_yaml: str):
+        """Apply mass, color, and scale overrides from meta.yaml to the model.
+        
+        These overrides take priority over values specified in the XML files.
+        """
+        
+        with open(scene_config_yaml, "r") as f:
+            cfg = yaml.safe_load(f)
+        scene_cfg = cfg.get("objects", {})
+        
+        for obj_type, entry in scene_cfg.items():
+            if obj_type not in self.asset_manager.list():
+                continue
+            
+            # Get metadata from AssetManager
+            meta = self.asset_manager.get(obj_type)
+            count = entry.get("count", 1)
+            
+            # Apply overrides to all instances of this object type
+            for i in range(count):
+                instance_name = f"{obj_type}_{i}"
+                try:
+                    body_id = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_BODY, instance_name)
+                except (TypeError, AttributeError):
+                    continue
+                
+                # Apply mass override
+                if "mass" in meta:
+                    mass_value = float(meta["mass"])
+                    self.model.body_mass[body_id] = mass_value
+                    if self.verbose:
+                        print(f"[Override] Set mass of {instance_name} to {mass_value}")
+                
+                # Apply color and scale overrides to all geoms of this body
+                geom_adr = self.model.body_geomadr[body_id]
+                geom_num = self.model.body_geomnum[body_id]
+                
+                for geom_idx in range(geom_num):
+                    geom_id = geom_adr + geom_idx
+                    
+                    # Apply color override
+                    if "color" in meta:
+                        color = meta["color"]
+                        if isinstance(color, list) and len(color) >= 3:
+                            rgba = np.array(color[:4] if len(color) >= 4 else color + [1.0], dtype=float)
+                            self.model.geom_rgba[geom_id] = rgba
+                            if self.verbose and geom_idx == 0:
+                                print(f"[Override] Set color of {instance_name} to {rgba}")
+                    
+                    # Apply scale override
+                    if "scale" in meta:
+                        scale = float(meta["scale"])
+                        # Scale all dimensions of the geom size
+                        self.model.geom_size[geom_id] *= scale
+                        if self.verbose and geom_idx == 0:
+                            print(f"[Override] Applied scale of {scale} to {instance_name}")
+
     # ======================================================================
     # Public API
     # ======================================================================
+    def get_object_metadata(self, instance_name: str) -> Dict[str, Any]:
+        """
+        Get asset metadata for an object instance.
+        
+        Args:
+            instance_name: Instance name like "plate_1", "cup_0", "kitchen_knife_2", etc.
+            
+        Returns:
+            Dictionary containing metadata (mass, color, scale, category, etc.)
+            
+        Example:
+            >>> meta = env.get_object_metadata("plate_1")
+            >>> print(meta["mass"], meta["color"], meta["category"])
+        """
+        # Find object type by looking up instance_name in the registry
+        # This handles cases where object type names have underscores (e.g., "kitchen_knife")
+        for obj_type, obj_info in self.registry.objects.items():
+            if instance_name in obj_info["instances"]:
+                return self.asset_manager.get(obj_type)
+        
+        # Fallback: if not found in registry, try parsing (for edge cases)
+        # Remove trailing underscore and number pattern
+        obj_type = re.sub(r'_\d+$', '', instance_name)
+        if obj_type in self.asset_manager.list():
+            return self.asset_manager.get(obj_type)
+        
+        raise KeyError(f"Object instance '{instance_name}' not found in registry or asset manager")
+    
     def update(self, object_list: List[Dict[str, Any]], persist: bool = False):
         """
         Batch update multiple objects in the environment.

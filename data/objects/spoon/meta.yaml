@@ -3,3 +3,19 @@ category: [utensil, metal, graspable]
 mass: 0.1
 color: [0.8, 0.8, 0.8, 1.0]
 scale: 1.0
+
+# Simulator-specific configurations
+mujoco:
+  xml_path: model.xml
+
+# Multiple perception modules with aliases
+perception:
+  ycb:
+    aliases: ["spoon", "spoon001"]
+    id: 46
+  coco:
+    aliases: ["spoon"]
+    category_id: 49
+  custom_detector:
+    aliases: ["metal_spoon", "table_spoon"]
+    confidence_threshold: 0.82

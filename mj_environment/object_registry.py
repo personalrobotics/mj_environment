@@ -57,7 +57,7 @@ class ObjectRegistry:
     def _preload_objects(self):
         """Track object instances that were preloaded into the MuJoCo model by Environment."""
         for obj_type, entry in self.scene_cfg.items():
-            if not self.asset_manager.has(obj_type):
+            if obj_type not in self.asset_manager.list():
                 if self.verbose:
                     print(f"[WARN] Unknown asset '{obj_type}', skipping preload.")
                 continue
@@ -180,6 +180,9 @@ class ObjectRegistry:
                 self.data.qpos[qpos_adr:qpos_adr+3] = pos
                 self.data.qpos[qpos_adr+3:qpos_adr+7] = quat
                 self.data.qvel[qvel_adr:qvel_adr+6] = 0
+                # Make sure the object is visible (it might have been hidden previously)
+                if not self.active_objects[name]:
+                    self._set_body_visibility(body_id, visible=True)
                 self.active_objects[name] = True
                 active_now.add(name)
 

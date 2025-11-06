@@ -14,7 +14,8 @@ requires-python = ">=3.9"
 dependencies = [
     "mujoco>=2.1.0",
     "numpy",
-    "pyyaml"
+    "pyyaml",
+    "asset-manager @ git+https://github.com/personalrobotics/asset_manager.git"
 ]
 
 [project.optional-dependencies]

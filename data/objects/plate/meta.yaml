@@ -3,3 +3,19 @@ category: [kitchenware, dishware, ceramic]
 mass: 0.4
 color: [1.0, 0.95, 0.9, 1.0]
 scale: 1.0
+
+# Simulator-specific configurations
+mujoco:
+  xml_path: model.xml
+
+# Multiple perception modules with aliases
+perception:
+  ycb:
+    aliases: ["plate", "plate001", "dinner plate"]
+    id: 44
+  coco:
+    aliases: ["plate", "dish"]
+    category_id: 46
+  custom_detector:
+    aliases: ["white_plate", "ceramic_plate"]
+    confidence_threshold: 0.90

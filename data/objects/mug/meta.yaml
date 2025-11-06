@@ -3,3 +3,19 @@ category: [kitchenware, drinkware, ceramic, handle]
 mass: 0.35
 color: [0.8, 0.8, 0.95, 1.0]
 scale: 1.0
+
+# Simulator-specific configurations
+mujoco:
+  xml_path: model.xml
+
+# Multiple perception modules with aliases
+perception:
+  ycb:
+    aliases: ["mug", "mug001", "coffee mug"]
+    id: 43
+  coco:
+    aliases: ["cup", "mug", "coffee cup"]
+    category_id: 47
+  custom_detector:
+    aliases: ["blue_mug", "mug_large"]
+    confidence_threshold: 0.80

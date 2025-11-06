@@ -3,3 +3,7 @@ category: [utensil, metal, sharp]
 mass: 0.15
 color: [0.7, 0.7, 0.7, 1.0]
 scale: 1.0
+
+# Simulator-specific configurations
+mujoco:
+  xml_path: model.xml

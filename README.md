@@ -21,8 +21,9 @@ At the same time, MuJoCo assets are often **scattered and inconsistent**, mixing
 graph TD
     A[scene.xml] -->|Base world| E(Environment)
     B[scene_config.yaml] -->|Inventory counts| E
-    C[data/objects/*] -->|Per-object YAML + XML| D[AssetManager]
-    D -->|Metadata + XML paths| F[ObjectRegistry]
+    C[data/objects/*] -->|Per-object YAML + XML| D[AssetManager<br/>External Package]
+    D -->|Metadata + XML paths| E
+    E -->|Object lifecycle| F[ObjectRegistry]
     E -->|Physics step| G[Simulation]
     F -->|Show/Hide via RGBA| G
     G -->|Render| H[MuJoCo Viewer]
@@ -35,27 +36,35 @@ graph TD
 - **Pre-initialized dynamic objects** — All possible objects are loaded once; visibility is toggled via RGBA alpha.  
 - **Clean asset separation** — Each object has:
   - `model.xml` → geometry and physical definition  
-  - `meta.yaml` → general properties (category, mass, color, scale, etc.)
+  - `meta.yaml` → general properties (category, mass, color, scale, etc.) and simulator-specific configs
+- **Metadata overrides** — Parameters in `meta.yaml` (mass, color, scale) take priority over values in XML files
+- **Perception aliases** — Multiple perception modules (YCB, COCO, custom detectors) can use different aliases for the same object, with automatic resolution via AssetManager
 - **In-memory composition** — The complete scene is built on the fly using `MjModel.from_xml_string`, with no temporary files.  
 
 ---
 
 ## 🧠 How It Works
 
-1. **AssetManager** loads all objects from `data/objects/*`, reading metadata and verifying XML files.  
+1. **AssetManager** (external package) loads all objects from `data/objects/*`, reading metadata and verifying XML files.  
 2. **Environment** composes a full MuJoCo scene in memory using:
    - a base `scene.xml`
+   - XML paths from AssetManager (via `mujoco.xml_path` in `meta.yaml`)
    - a `scene_config.yaml` specifying object counts  
-3. **ObjectRegistry** preloads every object and hides it (RGBA = 0).  
-4. **Dynamic updates** happen via `Environment.update()` — objects are activated, moved, or hidden.  
-5. **StateIO** saves or reloads simulation states to YAML.  
+3. **Metadata overrides** are applied — mass, color, and scale from `meta.yaml` override XML values
+4. **ObjectRegistry** preloads every object instance (e.g., `cup_0`, `cup_1`, `plate_0`) and hides them (RGBA = 0).  
+5. **Dynamic updates** happen via `Environment.update()` — objects are activated, moved, or hidden using instance names.  
+6. **StateIO** saves or reloads simulation states to YAML.  
 
 ---
 
 ## 🧩 Example
 
 ```python
+from asset_manager import AssetManager
 from mj_environment import Environment
+
+# Initialize AssetManager (external package)
+assets = AssetManager("data/objects", verbose=True)
 
 # Initialize environment
 env = Environment(
@@ -65,11 +74,21 @@ env = Environment(
     verbose=True,
 )
 
-# Dynamically activate and move objects
+# Dynamically activate and move objects (use instance names like "cup_0", "plate_1")
 env.update([
-    {"name": "cup", "pos": [0.1, 0.2, 0.4], "quat": [1, 0, 0, 0]},
-    {"name": "plate", "pos": [-0.2, 0.0, 0.4], "quat": [1, 0, 0, 0]},
+    {"name": "cup_0", "pos": [0.1, 0.2, 0.4], "quat": [1, 0, 0, 0]},
+    {"name": "plate_0", "pos": [-0.2, 0.0, 0.4], "quat": [1, 0, 0, 0]},
 ])
+
+# Access object metadata (mass, color, scale, category, etc.)
+meta = env.get_object_metadata("plate_1")
+print(f"Plate mass: {meta['mass']}, color: {meta['color']}, category: {meta['category']}")
+
+# Resolve perception aliases (using AssetManager)
+from asset_manager import AssetManager
+assets = AssetManager("data/objects")
+obj_type = assets.resolve_alias("red cup", module="ycb")  # Returns "cup"
+obj_type = assets.resolve_alias("coffee cup", module="coco")  # Also returns "cup"
 ```
 
 ---
@@ -86,11 +105,14 @@ uv venv
 source .venv/bin/activate
 
 # 3. Install dependencies in editable mode
+# This will automatically install the external AssetManager package
 uv pip install -e .
 ```
 
 > 💡 You can substitute `uv` with `python -m venv` and `pip` if preferred,  
-> but `uv` provides faster dependency resolution and reproducible builds.
+> but `uv` provides faster dependency resolution and reproducible builds.  
+> 
+> **Note:** The AssetManager is installed as an external dependency from the [asset_manager](https://github.com/personalrobotics/asset_manager) repository.
 
 ---
 
@@ -99,18 +121,30 @@ uv pip install -e .
 MuJoCo scripts should always be executed using the `mjpython` interpreter provided by your MuJoCo installation.  
 This ensures correct linking to the MuJoCo library and rendering context (GLFW).
 
+**Simplest approach (recommended):** Use the provided helper script which automatically handles the complexity:
+
 ```bash
-# Activate environment first
-source .venv/bin/activate
-
 # Dynamic Kitchen Demo – full feature showcase
-mjpython demos/dynamic_kitchen_demo.py
+./run_demo.sh demos/dynamic_kitchen_demo.py
 
-# Perception Update Demo – threaded perception and persistence
-mjpython demos/perception_update_demo.py
+# Perception Update Demo – multiple perception modules with aliases
+./run_demo.sh demos/perception_update_demo.py
+```
 
-# Asset Manager Demo – view loaded categories, overrides, and metadata
-mjpython demos/asset_manager_demo.py
+### Demo Features
+
+**Perception Update Demo** demonstrates:
+- Multiple perception modules (YCB, COCO, custom detectors) running concurrently
+- Alias-based detection where each module uses its own naming conventions
+- Automatic alias resolution to object types and instances
+- Timeout-based caching (objects remain visible for 2 seconds after detection)
+- Smooth object appearance/disappearance without flickering
+
+**Manual approach:** If you prefer to run `mjpython` directly, you may need to set `DYLD_LIBRARY_PATH` on macOS when using `uv`:
+
+```bash
+source .venv/bin/activate
+DYLD_LIBRARY_PATH=$(python -c "import sys; import os; print(os.path.dirname(os.path.dirname(sys.executable)))")/lib .venv/bin/mjpython demos/dynamic_kitchen_demo.py
 ```
 
 ---
@@ -119,10 +153,11 @@ mjpython demos/asset_manager_demo.py
 
 | Challenge | Solution |
 |------------|-----------|
-| MuJoCo scenes can’t change at runtime | Pre-initialize all objects and control visibility (RGBA = 0 → 1) |
+| MuJoCo scenes can't change at runtime | Pre-initialize all objects and control visibility (RGBA = 0 → 1) |
 | XML files are cluttered and repetitive | Separate metadata (`meta.yaml`) from simulation files (`model.xml`) |
 | Adding new object types requires manual edits | AssetManager auto-discovers per-object directories |
 | Need flexible, perception-driven scenes | Dynamic activation and state cloning via Environment API |
+| Multiple perception systems use different names | Perception aliases with automatic resolution via AssetManager |
 
 ---
 
@@ -140,6 +175,36 @@ data/
       model.xml
       meta.yaml
 ```
+
+### Example `meta.yaml` structure:
+
+```yaml
+name: cup
+category: [kitchenware, drinkware, ceramic]
+mass: 0.25
+color: [0.9, 0.9, 1.0, 1.0]
+scale: 1.0
+
+# Simulator-specific configurations
+mujoco:
+  xml_path: model.xml
+
+# Multiple perception modules with aliases
+perception:
+  ycb:
+    aliases: ["cup", "cup001", "red cup", "drinking cup"]
+    id: 42
+  coco:
+    aliases: ["cup", "mug", "coffee cup"]
+    category_id: 47
+  custom_detector:
+    aliases: ["red_cup_v2", "cup_small"]
+    confidence_threshold: 0.85
+```
+
+The `mass`, `color`, and `scale` parameters in `meta.yaml` will override any values specified in the `model.xml` file.
+
+**Perception aliases** allow different perception systems to use their own naming conventions (e.g., YCB uses "cup001", COCO uses "coffee cup"). The AssetManager automatically resolves these aliases to the correct object type, enabling seamless integration with multiple perception pipelines.
 
 ---
 
