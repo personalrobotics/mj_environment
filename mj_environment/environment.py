@@ -6,7 +6,32 @@ import numpy as np
 import re
 from xml.etree.ElementTree import Element, SubElement, tostring, parse as ETparse
 from xml.dom import minidom
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
+
+
+def _deep_copy_element(elem: Element, parent: Optional[Element] = None) -> Element:
+    """
+    Recursively deep copy an XML element including all children, text, and tail.
+
+    Args:
+        elem: The element to copy
+        parent: If provided, the copy will be appended to this parent
+
+    Returns:
+        A deep copy of the element
+    """
+    if parent is not None:
+        new_elem = SubElement(parent, elem.tag, elem.attrib.copy())
+    else:
+        new_elem = Element(elem.tag, elem.attrib.copy())
+
+    new_elem.text = elem.text
+    new_elem.tail = elem.tail
+
+    for child in elem:
+        _deep_copy_element(child, new_elem)
+
+    return new_elem
 
 import os
 from .simulation import Simulation
@@ -68,7 +93,7 @@ class Environment:
         )
 
         # ------------------------------------------------------------------
-        # 5️⃣ Add state I/O helper for serialization
+        # 6️⃣ Add state I/O helper for serialization
         # ------------------------------------------------------------------
         self.state_io = StateIO()
 
@@ -122,18 +147,11 @@ class Environment:
                 instance_name = f"{obj_type}_{i}"
                 # Copy all bodies from the object's worldbody
                 for obj_body in obj_worldbody.findall("body"):
-                    # Clone the body element
-                    new_body = SubElement(
-                        worldbody_el,
-                        "body",
-                        obj_body.attrib.copy()
-                    )
-                    # Update position to hide position
+                    # Deep copy the entire body element tree (handles nested structures)
+                    new_body = _deep_copy_element(obj_body, worldbody_el)
+                    # Update name and position for this instance
                     new_body.set("name", instance_name)
                     new_body.set("pos", f"{self.hide_pos[0]} {self.hide_pos[1]} {self.hide_pos[2]}")
-                    # Copy all children (geoms, joints, etc.)
-                    for child in obj_body:
-                        SubElement(new_body, child.tag, child.attrib)
 
         xml_bytes = tostring(mujoco_el, "utf-8")
         return minidom.parseString(xml_bytes).toprettyxml(indent="  ")
@@ -256,9 +274,7 @@ class Environment:
 
     def update_from_clone(self, cloned_data: mujoco.MjData):
         """Restore this environment's state from a cloned MjData."""
-        if cloned_data.model is not self.sim.model:
-            raise ValueError("Cannot restore: cloned_data belongs to a different model.")
-        Simulation.copy_data(self.sim.data, cloned_data)
+        Simulation.copy_data(self.model, self.sim.data, cloned_data)
 
     # ------------------------------------------------------------------
     # Serialization
@@ -270,3 +286,7 @@ class Environment:
     def load_state(self, path: str):
         """Load simulation state from YAML."""
         self.registry.active_objects = self.state_io.load(self.model, self.data, path)
+        # Sync visibility state to match loaded active_objects
+        for name, is_active in self.registry.active_objects.items():
+            body_id = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_BODY, name)
+            self.registry._set_body_visibility(body_id, visible=is_active)

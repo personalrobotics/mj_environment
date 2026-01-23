@@ -96,6 +96,25 @@ class ObjectRegistry:
                 # Make all objects invisible initially (they start inactive)
                 self._set_body_visibility(body_id, visible=False)
 
+    def _parse_object_type(self, instance_name: str) -> Optional[str]:
+        """
+        Parse object type from instance name, handling underscores correctly.
+
+        Examples:
+            cup_0 -> cup
+            kitchen_knife_2 -> kitchen_knife
+            my_cool_object_15 -> my_cool_object (if registered)
+        """
+        # Check each registered object type to find a match
+        for obj_type in self.objects:
+            # Instance names follow pattern: {obj_type}_{index}
+            if instance_name.startswith(obj_type + "_"):
+                suffix = instance_name[len(obj_type) + 1:]
+                # Verify suffix is a valid index (digits only)
+                if suffix.isdigit():
+                    return obj_type
+        return None
+
     def _set_body_visibility(self, body_id: int, visible: bool):
         """Show or hide all geoms of a body by setting RGBA alpha channel."""
         geom_adr = self.model.body_geomadr[body_id]
@@ -168,7 +187,13 @@ class ObjectRegistry:
             quat = np.array(upd.get("quat", [1, 0, 0, 0]), dtype=float)
 
             if name not in self.active_objects:
-                obj_type = name.split("_")[0]
+                # Find object type by checking registry membership
+                # This handles object types with underscores (e.g., kitchen_knife_0 -> kitchen_knife)
+                obj_type = self._parse_object_type(name)
+                if obj_type is None:
+                    if self.verbose:
+                        print(f"[WARN] Could not determine object type for '{name}', skipping.")
+                    continue
                 new_name = self.activate(obj_type, pos, quat)
                 if new_name:
                     active_now.add(new_name)
