@@ -7,10 +7,16 @@ import os
 import yaml
 import mujoco
 import numpy as np
-from typing import Dict, List, Any, Optional
+from typing import Dict, List, Any, Optional, Union, Sequence
+
+from .exceptions import (
+    ObjectTypeNotFoundError,
+    ObjectNotFoundError,
+    ConfigurationError,
+)
 
 
-def _normalize_quat(quat: np.ndarray) -> np.ndarray:
+def _normalize_quat(quat: Union[Sequence[float], np.ndarray]) -> np.ndarray:
     """
     Normalize a quaternion to unit length.
 
@@ -72,11 +78,19 @@ class ObjectRegistry:
     # ------------------------------------------------------------------
     def _load_scene_config(self, yaml_path: str):
         if not os.path.exists(yaml_path):
-            raise FileNotFoundError(yaml_path)
+            raise ConfigurationError(
+                f"Scene config file not found: {yaml_path}",
+                path=yaml_path,
+                hint="Create the file or check the path passed to Environment().",
+            )
         with open(yaml_path, "r") as f:
             cfg = yaml.safe_load(f)
         if "objects" not in cfg:
-            raise ValueError(f"Scene config must define 'objects': {yaml_path}")
+            raise ConfigurationError(
+                f"Scene config must define 'objects' key",
+                path=yaml_path,
+                hint="Add an 'objects' section with object types and counts.",
+            )
         self.scene_cfg = cfg["objects"]
 
     # ------------------------------------------------------------------
@@ -195,10 +209,15 @@ class ObjectRegistry:
     # ------------------------------------------------------------------
     # Runtime API
     # ------------------------------------------------------------------
-    def activate(self, obj_type: str, pos: List[float], quat: Optional[List[float]] = None) -> Optional[str]:
+    def activate(
+        self,
+        obj_type: str,
+        pos: Union[Sequence[float], np.ndarray],
+        quat: Optional[Union[Sequence[float], np.ndarray]] = None,
+    ) -> Optional[str]:
         """Activate the next available hidden instance of a given type."""
         if obj_type not in self.objects:
-            raise KeyError(obj_type)
+            raise ObjectTypeNotFoundError(obj_type, list(self.objects.keys()))
         candidates = [n for n in self.objects[obj_type]["instances"] if not self.active_objects[n]]
         if not candidates:
             if self.verbose:
@@ -224,7 +243,7 @@ class ObjectRegistry:
     def hide(self, name: str):
         """Hide an active object by moving and disabling it."""
         if name not in self.active_objects:
-            raise KeyError(name)
+            raise ObjectNotFoundError(name, list(self.active_objects.keys()))
         if not self.active_objects[name]:
             return
         body_id = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_BODY, name)
@@ -239,7 +258,7 @@ class ObjectRegistry:
         if self.verbose:
             print(f"[INFO] Hid {name}.")
 
-    def update(self, updates: List[Dict[str, Any]], persist: bool = False):
+    def update(self, updates: List[Dict[str, Any]], persist: bool = False) -> None:
         """
         Batch activate/move/hide objects based on updates.
 

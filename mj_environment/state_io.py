@@ -4,6 +4,8 @@ import yaml
 import numpy as np
 import mujoco
 
+from .exceptions import StateError
+
 
 class StateIO:
     """Serialize and restore simulation state."""
@@ -33,13 +35,19 @@ class StateIO:
             state = yaml.safe_load(f)
 
         if state.get("schema_version") != self.SCHEMA_VERSION:
-            raise ValueError("Incompatible YAML schema version.")
+            raise StateError(
+                f"Incompatible schema version: found {state.get('schema_version')}, expected {self.SCHEMA_VERSION}",
+                hint="This state file was saved with a different version of mj_environment.",
+            )
 
         qpos = np.array(state["qpos"])
         qvel = np.array(state["qvel"])
 
         if len(qpos) != model.nq or len(qvel) != model.nv:
-            raise ValueError("State file does not match model dimensions.")
+            raise StateError(
+                f"State dimensions mismatch: qpos={len(qpos)} (expected {model.nq}), qvel={len(qvel)} (expected {model.nv})",
+                hint="The state file was saved from a different model configuration.",
+            )
 
         data.qpos[:] = qpos
         data.qvel[:] = qvel

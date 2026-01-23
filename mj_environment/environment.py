@@ -38,6 +38,8 @@ from .simulation import Simulation
 from .object_registry import ObjectRegistry
 from asset_manager import AssetManager
 from .state_io import StateIO
+from .exceptions import ConfigurationError, ObjectNotFoundError
+from .types import Detection, ObjectMetadata
 
 
 class Environment:
@@ -100,6 +102,9 @@ class Environment:
         # ------------------------------------------------------------------
         self.state_io = StateIO()
 
+        # Track whether this is a fork (for potential future use)
+        self._is_fork = False
+
         if verbose:
             print(f"[Environment] Loaded scene with {len(self.registry.objects)} object types.")
 
@@ -112,10 +117,20 @@ class Environment:
         - the base scene (e.g., table, lights, cameras)
         - all object instances defined in scene_config.yaml
         """
+        if not os.path.exists(scene_yaml):
+            raise ConfigurationError(
+                f"Scene config file not found: {scene_yaml}",
+                path=scene_yaml,
+                hint="Create the file or check the path passed to Environment().",
+            )
         with open(scene_yaml, "r") as f:
             cfg = yaml.safe_load(f)
         if "objects" not in cfg:
-            raise ValueError(f"No 'objects' field found in {scene_yaml}")
+            raise ConfigurationError(
+                "Scene config must define 'objects' key",
+                path=scene_yaml,
+                hint="Add an 'objects' section with object types and counts.",
+            )
         scene_cfg = cfg["objects"]
 
         mujoco_el = Element("mujoco", {"model": "autogen_scene"})
@@ -147,7 +162,11 @@ class Environment:
             obj_tree = ETparse(xml_path)
             obj_root = obj_tree.getroot()
             obj_worldbody = obj_root.find("worldbody")
-            
+            if obj_worldbody is None:
+                if self.verbose:
+                    print(f"[WARN] No worldbody found in {xml_path}, skipping.")
+                continue
+
             for i in range(count):
                 instance_name = f"{obj_type}_{i}"
                 # Copy all bodies from the object's worldbody
@@ -227,59 +246,72 @@ class Environment:
     # ======================================================================
     # Public API
     # ======================================================================
-    def get_object_metadata(self, instance_name: str) -> Dict[str, Any]:
+    def get_object_metadata(self, instance_name: str) -> ObjectMetadata:
         """
         Get asset metadata for an object instance.
-        
+
         Args:
             instance_name: Instance name like "plate_1", "cup_0", "kitchen_knife_2", etc.
-            
+
         Returns:
-            Dictionary containing metadata (mass, color, scale, category, etc.)
-            
+            ObjectMetadata dict with keys: name, category, mass, color, scale, etc.
+
+        Raises:
+            ObjectNotFoundError: If instance_name is not in the registry.
+
         Example:
             >>> meta = env.get_object_metadata("plate_1")
             >>> print(meta["mass"], meta["color"], meta["category"])
         """
         # Find object type by looking up instance_name in the registry
         # This handles cases where object type names have underscores (e.g., "kitchen_knife")
-        for obj_type, obj_info in self.registry.objects.items():
+        for registered_type, obj_info in self.registry.objects.items():
             if instance_name in obj_info["instances"]:
-                return self.asset_manager.get(obj_type)
+                return self.asset_manager.get(registered_type)
 
         # Fallback: use registry's parsing logic for edge cases
-        obj_type = self.registry._parse_object_type(instance_name)
-        if obj_type is not None and obj_type in self.asset_manager.list():
-            return self.asset_manager.get(obj_type)
+        parsed_type = self.registry._parse_object_type(instance_name)
+        if parsed_type is not None and parsed_type in self.asset_manager.list():
+            return self.asset_manager.get(parsed_type)
         
-        raise KeyError(f"Object instance '{instance_name}' not found in registry or asset manager")
+        all_instances = list(self.registry.active_objects.keys())
+        raise ObjectNotFoundError(instance_name, all_instances)
     
-    def update(self, object_list: List[Dict[str, Any]], persist: bool = False):
+    def update(
+        self,
+        object_list: Union[List[Detection], List[Dict[str, Any]]],
+        persist: bool = False,
+    ) -> None:
         """
         Batch update multiple objects in the environment.
 
-        Each entry in object_list should have:
-          {"name": str, "pos": [x, y, z], "quat": [w, x, y, z]}
+        Args:
+            object_list: List of detection dicts with keys:
+                - name: Instance name (e.g., "cup_0")
+                - pos: Position [x, y, z]
+                - quat: (optional) Quaternion [w, x, y, z], defaults to [1, 0, 0, 0]
+            persist: If False (default), hide objects not in the list.
+                     If True, keep previously active objects visible.
         """
-        self.registry.update(object_list, persist)
+        self.registry.update(object_list, persist)  # type: ignore[arg-type]
         mujoco.mj_forward(self.model, self.data)
 
-    def step(self, ctrl=None):
+    def step(self, ctrl: Optional[np.ndarray] = None) -> None:
         """Advance simulation by one step."""
         self.sim.step(ctrl)
 
-    def reset(self):
+    def reset(self) -> None:
         """Reset simulation and all objects."""
         self.sim.reset()
 
     # ------------------------------------------------------------------
     # Serialization
     # ------------------------------------------------------------------
-    def save_state(self, path: str):
+    def save_state(self, path: str) -> None:
         """Serialize current simulation state to YAML."""
         self.state_io.save(self.model, self.data, self.registry.active_objects, path)
 
-    def load_state(self, path: str):
+    def load_state(self, path: str) -> None:
         """Load simulation state from YAML."""
         self.registry.active_objects = self.state_io.load(self.model, self.data, path)
         # Sync visibility state to match loaded active_objects
