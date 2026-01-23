@@ -35,15 +35,16 @@ class Simulation:
             mujoco.MjData: A new data object with identical simulation state.
         """
         clone = mujoco.MjData(self.model)
-        self.copy_data(clone, self.data)
+        self.copy_data(self.model, clone, self.data)
         return clone
 
     @staticmethod
-    def copy_data(dst: mujoco.MjData, src: mujoco.MjData):
+    def copy_data(model: mujoco.MjModel, dst: mujoco.MjData, src: mujoco.MjData):
         """
         Copy all MuJoCo state arrays between two MjData objects.
 
         Args:
+            model: The MuJoCo model (required for mj_forward)
             dst: Destination MjData (already constructed for the same model)
             src: Source MjData to copy from
         """
@@ -53,4 +54,4 @@ class Simulation:
         np.copyto(dst.ctrl, src.ctrl)
         np.copyto(dst.qacc, src.qacc)
         np.copyto(dst.qfrc_applied, src.qfrc_applied)
-        mujoco.mj_forward(dst.model, dst)
+        mujoco.mj_forward(model, dst)
