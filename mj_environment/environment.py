@@ -246,11 +246,10 @@ class Environment:
         for obj_type, obj_info in self.registry.objects.items():
             if instance_name in obj_info["instances"]:
                 return self.asset_manager.get(obj_type)
-        
-        # Fallback: if not found in registry, try parsing (for edge cases)
-        # Remove trailing underscore and number pattern
-        obj_type = re.sub(r'_\d+$', '', instance_name)
-        if obj_type in self.asset_manager.list():
+
+        # Fallback: use registry's parsing logic for edge cases
+        obj_type = self.registry._parse_object_type(instance_name)
+        if obj_type is not None and obj_type in self.asset_manager.list():
             return self.asset_manager.get(obj_type)
         
         raise KeyError(f"Object instance '{instance_name}' not found in registry or asset manager")
