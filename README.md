@@ -40,45 +40,54 @@ env.update([
 env.step()
 ```
 
-## Key Features
+## Forking
 
-### Forking for Motion Planning
+`fork()` creates lightweight, independent environment clones. This is useful for two scenarios:
 
-Create independent environment clones for trajectory simulation without affecting the original state:
+**Motion planning** — Evaluate trajectories without polluting the main simulation. Run physics forward, check for collisions, then discard the fork. The original environment remains unchanged.
+
+**Perception processing** — Filter and validate detections in isolation before committing to the main environment. Process noisy sensor data in a fork, then `sync_from()` to apply the cleaned state.
+
+```mermaid
+graph LR
+    E[Environment] -->|fork| P[Planning Fork]
+    E -->|fork| R[Perception Fork]
+    P -->|step physics| P
+    P -.->|discard| X[discarded]
+    R -->|update detections| R
+    R -->|sync_from| E
+```
+
+### Planning Example
 
 ```python
-# Fork creates a lightweight clone with independent physics state
+# Fork for trajectory evaluation - original stays unchanged
 planning_env = env.fork()
 planning_env.update([{"name": "cup_0", "pos": [0.5, 0.5, 0.4], "quat": [1, 0, 0, 0]}])
 
 for _ in range(100):
     planning_env.sim.step()
 
-# Original environment is unchanged
+# Original is untouched
 assert env.data.time == 0.0
 ```
 
 For parallel planners:
 
 ```python
-from concurrent.futures import ThreadPoolExecutor
-
 forks = env.fork(n=4)
 with ThreadPoolExecutor() as executor:
     results = list(executor.map(planner.evaluate, forks))
 ```
 
-### Syncing State from Forks
-
-Apply processed state from a fork back to the main environment:
+### Perception Example
 
 ```python
+# Fork for perception processing - sync back when done
 with env.fork() as perception_fork:
     perception_fork.update(filtered_detections, persist=False)
     env.sync_from(perception_fork)
 ```
-
-This pattern is useful for perception processing: filter and validate detections in an isolated fork, then commit the results to the main simulation.
 
 ### Perception Aliases
 
@@ -99,7 +108,7 @@ graph TD
     E -->|Object lifecycle| F[ObjectRegistry]
     E -->|Physics| G[Simulation]
     F -->|Show/Hide via RGBA| G
-    G -->|Render| H[MuJoCo Viewer]
+    G --> H[MuJoCo Viewer]
 ```
 
 **Environment** composes the MuJoCo scene in memory from:
