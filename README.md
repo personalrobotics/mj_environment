@@ -44,7 +44,7 @@ env.step()
 
 `fork()` creates lightweight, independent environment clones. This is useful for two scenarios:
 
-**Motion planning** — Evaluate trajectories without polluting the main simulation. Run physics forward, check for collisions, then discard the fork. The original environment remains unchanged.
+**Motion planning** — Run multiple planners in parallel, each on its own fork. When one planner succeeds, cancel the others via a shared flag. Forks are discarded after use; the original environment remains unchanged throughout.
 
 **Perception processing** — Filter and validate detections in isolation before committing to the main environment. Process noisy sensor data in a fork, then `sync_from()` to apply the cleaned state.
 
