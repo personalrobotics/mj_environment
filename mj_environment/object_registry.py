@@ -10,6 +10,26 @@ import numpy as np
 from typing import Dict, List, Any, Optional
 
 
+def _normalize_quat(quat: np.ndarray) -> np.ndarray:
+    """
+    Normalize a quaternion to unit length.
+
+    MuJoCo expects unit quaternions for proper physics simulation.
+    This ensures quaternions are valid even if provided unnormalized.
+
+    Args:
+        quat: Quaternion array [w, x, y, z]
+
+    Returns:
+        Normalized quaternion. Returns identity [1, 0, 0, 0] if input is near-zero.
+    """
+    q = np.array(quat, dtype=float)
+    norm = np.linalg.norm(q)
+    if norm < 1e-10:
+        return np.array([1, 0, 0, 0], dtype=float)
+    return q / norm
+
+
 class ObjectRegistry:
     """
     Manages dynamic objects in a MuJoCo environment.
@@ -23,6 +43,14 @@ class ObjectRegistry:
       - Objects are preinitialized as e.g. cup_0, cup_1, ...
       - Hidden objects are reusable to respect MuJoCo immutability.
       - For unique identifiers, overprovision in the YAML config.
+
+    Thread Safety:
+      - This class is NOT thread-safe for concurrent writes.
+      - Multiple threads may safely READ from `objects` dict concurrently.
+      - All write operations (activate, hide, update) must be synchronized
+        externally if accessed from multiple threads.
+      - For multi-threaded perception pipelines, use a queue to batch updates
+        and process them on a single thread (see perception_update_demo.py).
     """
 
     def __init__(self, model, data, asset_manager, scene_config_yaml, hide_pos=[0, 0, -1], verbose=False):
@@ -151,7 +179,7 @@ class ObjectRegistry:
         if quat is None:
             self.data.qpos[qpos_adr+3:qpos_adr+7] = np.array([1, 0, 0, 0], dtype=float)
         else:
-            self.data.qpos[qpos_adr+3:qpos_adr+7] = np.array(quat, dtype=float)
+            self.data.qpos[qpos_adr+3:qpos_adr+7] = _normalize_quat(quat)
         self.data.qvel[qvel_adr:qvel_adr+6] = 0
         self._set_body_visibility(body_id, visible=True)
         self.active_objects[name] = True
@@ -191,7 +219,7 @@ class ObjectRegistry:
         for upd in updates:
             name = upd["name"]
             pos = np.array(upd["pos"], dtype=float)
-            quat = np.array(upd.get("quat", [1, 0, 0, 0]), dtype=float)
+            quat = _normalize_quat(upd.get("quat", [1, 0, 0, 0]))
 
             if name not in self.active_objects:
                 # Find object type by checking registry membership

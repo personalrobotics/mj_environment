@@ -119,7 +119,9 @@ class Environment:
         scene_cfg = cfg["objects"]
 
         mujoco_el = Element("mujoco", {"model": "autogen_scene"})
-        SubElement(mujoco_el, "include", {"file": base_scene_xml})
+        # Convert to absolute path for reliable include resolution
+        abs_scene_path = os.path.abspath(base_scene_xml)
+        SubElement(mujoco_el, "include", {"file": abs_scene_path})
         worldbody_el = SubElement(mujoco_el, "worldbody")
 
         for obj_type, entry in scene_cfg.items():
