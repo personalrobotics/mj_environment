@@ -9,7 +9,7 @@ Key features:
 - Multiple perception modules running concurrently
 - Alias-based detection (e.g., "cup001", "red cup", "coffee cup")
 - Automatic alias resolution to object types and instances
-- Realistic simulation of different detection behaviors per module
+- Fork-based perception processing with sync_from() to update main environment
 """
 
 import mujoco
@@ -46,25 +46,24 @@ def perception_module_thread(
     available_aliases = aliases_by_module.get(module_name, [])
     if not available_aliases:
         return
-    
+
     while True:
         detected = []
-        # Simulate detecting 1-2 random objects using aliases (reduced from 1-3)
+        # Simulate detecting 1-2 random objects using aliases
         num_detections = np.random.randint(1, min(3, len(available_aliases) + 1))
         selected_aliases = np.random.choice(available_aliases, size=num_detections, replace=False)
-        
+
         for alias in selected_aliases:
             try:
                 # Resolve alias to object type
                 obj_type = asset_manager.resolve_alias(alias, module=module_name)
-                
+
                 # Get available instances for this object type
                 if obj_type in registry.objects:
                     instances = registry.objects[obj_type]["instances"]
                     if instances:
-                        # Select a random instance (or use the first available hidden one)
                         instance_name = np.random.choice(instances)
-                        
+
                         pos = [
                             np.random.uniform(-0.4, 0.4),
                             np.random.uniform(-0.4, 0.4),
@@ -74,13 +73,12 @@ def perception_module_thread(
                             "name": instance_name,
                             "pos": pos,
                             "quat": [1, 0, 0, 0],
-                            "alias": alias,  # Keep track of the alias used
-                            "module": module_name,  # Keep track of the module
+                            "alias": alias,
+                            "module": module_name,
                         })
-            except (KeyError, ValueError) as e:
-                # Alias not found or resolution failed - skip
+            except (KeyError, ValueError):
                 continue
-        
+
         if detected:
             update_queue.put({
                 "module": module_name,
@@ -92,24 +90,21 @@ def perception_module_thread(
 def collect_perception_aliases(env: Environment) -> Dict[str, List[str]]:
     """
     Collect all aliases from perception modules for each object type.
-    
+
     Returns:
         Dictionary mapping module names to lists of available aliases.
     """
     aliases_by_module: Dict[str, List[str]] = {}
-    
-    # Iterate through all object types
+
     for obj_type in env.asset_manager.list():
         try:
             meta = env.asset_manager.get(obj_type)
             perception_config = meta.get("perception", {})
-            
-            # For each perception module (ycb, coco, custom_detector, etc.)
+
             for module_name, module_config in perception_config.items():
                 if not isinstance(module_config, dict):
                     continue
-                
-                # Get aliases for this module
+
                 module_aliases = module_config.get("aliases", [])
                 if module_aliases:
                     if module_name not in aliases_by_module:
@@ -117,12 +112,22 @@ def collect_perception_aliases(env: Environment) -> Dict[str, List[str]]:
                     aliases_by_module[module_name].extend(module_aliases)
         except Exception:
             continue
-    
+
     return aliases_by_module
 
 
 def perception_update_demo():
-    """Run comprehensive perception update demo with multiple modules and aliases."""
+    """
+    Run perception update demo using fork() and sync_from().
+
+    This demonstrates the recommended pattern for perception integration:
+    1. Perception threads send detections to a queue
+    2. Main thread creates a fork to process/filter detections
+    3. Fork's state is synced back to main environment via sync_from()
+
+    This pattern ensures thread-safe updates and allows for filtering/validation
+    before committing changes to the main environment.
+    """
     env = Environment(
         base_scene_xml="data/scene.xml",
         objects_dir="data/objects",
@@ -150,10 +155,11 @@ def perception_update_demo():
 
     # Collect all aliases organized by perception module
     aliases_by_module = collect_perception_aliases(env)
-    
+
     print("=" * 60)
-    print("Perception Modules and Aliases:")
+    print("Perception Demo with fork() + sync_from()")
     print("=" * 60)
+    print("\nPerception Modules and Aliases:")
     for module_name, aliases in aliases_by_module.items():
         print(f"  {module_name}: {len(aliases)} aliases")
         print(f"    {', '.join(aliases[:5])}" + ("..." if len(aliases) > 5 else ""))
@@ -171,7 +177,7 @@ def perception_update_demo():
                 env.registry,
                 z_center,
                 aliases_by_module,
-                1.0 + np.random.uniform(-0.3, 0.3),  # Slightly different intervals
+                1.0 + np.random.uniform(-0.3, 0.3),
             ),
             daemon=True,
         )
@@ -180,43 +186,38 @@ def perception_update_demo():
         print(f"Started {module_name} perception module")
 
     print(f"\nRunning {len(perception_threads)} perception modules concurrently")
-    print("persist=False: Objects disappear if not continuously detected")
+    print("Using fork() to process detections, sync_from() to update main env")
     print("Press Esc to exit\n")
 
     with mujoco.viewer.launch_passive(model, data) as viewer:
-        # Configure camera
         viewer.cam.lookat[:] = [0, 0, 0]
         viewer.cam.azimuth = -45
         viewer.cam.elevation = -45
         viewer.cam.distance = 2.0
 
-        # Track latest detections with timestamps (keyed by module name)
-        # Format: {module_name: {instance_name: {"detection": {...}, "timestamp": float}}}
+        # Track detections with timestamps
         detection_cache: Dict[str, Dict[str, Dict[str, Any]]] = {}
-        detection_timeout = 2.0  # Keep detections visible for 2 seconds
-        
+        detection_timeout = 2.0
+
         while viewer.is_running():
             current_time = time.time()
-            
-            # Process all pending perception updates from all modules
+
+            # Collect all pending detections from perception threads
             try:
                 while not update_queue.empty():
                     update = update_queue.get_nowait()
                     module = update["module"]
                     detections = update["detections"]
-                    
-                    # Initialize module cache if needed
+
                     if module not in detection_cache:
                         detection_cache[module] = {}
-                    
-                    # Update cache with new detections (add timestamp)
+
                     for det in detections:
                         instance_name = det["name"]
                         detection_cache[module][instance_name] = {
                             "detection": det,
                             "timestamp": current_time,
                         }
-                        # Print detection info
                         print(
                             f"[{module}] Detected '{det['alias']}' → {det['name']} "
                             f"at ({det['pos'][0]:.2f}, {det['pos'][1]:.2f}, {det['pos'][2]:.2f})"
@@ -224,16 +225,14 @@ def perception_update_demo():
             except queue.Empty:
                 pass
 
-            # Collect all valid (non-expired) detections from all modules
-            # Deduplicate by instance_name, keeping the most recent detection
+            # Build list of valid (non-expired) detections
             valid_detections_dict: Dict[str, Dict[str, Any]] = {}
             for module_cache in detection_cache.values():
                 for instance_name, cached_data in list(module_cache.items()):
-                    # Remove expired detections
                     if current_time - cached_data["timestamp"] > detection_timeout:
                         del module_cache[instance_name]
                         continue
-                    # Add valid detection (keep most recent if multiple modules detect same instance)
+
                     det = cached_data["detection"]
                     if instance_name not in valid_detections_dict or \
                        cached_data["timestamp"] > valid_detections_dict[instance_name].get("_timestamp", 0):
@@ -243,22 +242,26 @@ def perception_update_demo():
                             "quat": det["quat"],
                             "_timestamp": cached_data["timestamp"],
                         }
-            
-            # Convert to list
+
             valid_detections = [
                 {k: v for k, v in det.items() if k != "_timestamp"}
                 for det in valid_detections_dict.values()
             ]
-            
-            # Limit total visible objects to avoid clutter (max 4 objects)
+
+            # Limit to max 4 objects
             if len(valid_detections) > 4:
-                # Randomly sample 4 detections to keep
                 indices = np.random.choice(len(valid_detections), size=4, replace=False)
                 valid_detections = [valid_detections[i] for i in indices]
 
-            # Update environment with all valid detections (from all modules)
+            # Use fork() + sync_from() pattern for thread-safe updates
+            # This allows filtering/validation before committing to main env
             if valid_detections:
-                env.update(valid_detections, persist=False)
+                with env.fork() as perception_fork:
+                    # Process detections in the fork (could add filtering here)
+                    perception_fork.update(valid_detections, persist=False)
+
+                    # Sync processed state back to main environment
+                    env.sync_from(perception_fork)
 
             viewer.sync()
             time.sleep(0.1)
