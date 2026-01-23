@@ -188,6 +188,30 @@ Values in `meta.yaml` (mass, color, scale) override those in `model.xml`.
 python demos/parallel_planning_demo.py           # Parallel planners with cancellation
 ```
 
+## Error Handling
+
+All exceptions inherit from `MjEnvironmentError` for easy catching:
+
+```python
+from mj_environment import MjEnvironmentError, ObjectTypeNotFoundError
+
+try:
+    env.registry.activate("cupp", [0, 0, 0.5])  # typo
+except ObjectTypeNotFoundError as e:
+    print(e)
+    # Object type 'cupp' not found in registry.
+    #   Available types: ['cup', 'plate']
+    #   Did you mean: 'cup'?
+    #   Hint: Check that 'cupp' is defined in scene_config.yaml.
+```
+
+Available exceptions:
+- `ObjectTypeNotFoundError` — unknown object type (suggests similar names)
+- `ObjectNotFoundError` — unknown object instance
+- `ObjectPoolExhaustedError` — all instances of a type are active
+- `ConfigurationError` — missing or invalid config files
+- `StateError` — state loading/saving issues
+
 ## API Reference
 
 ### Environment

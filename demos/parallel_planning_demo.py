@@ -14,7 +14,7 @@ import numpy as np
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
 from typing import Optional, List
-from mj_environment import Environment
+from mj_environment import Environment, MjEnvironmentError
 
 
 @dataclass
@@ -161,8 +161,8 @@ def parallel_planning_demo():
                     winning_plan = result
                     cancel.set()
                     print(f"\n[Manager] {planner_name} won! Cancelling others...")
-            except Exception as e:
-                print(f"[{planner_name}] Error: {e}")
+            except MjEnvironmentError as e:
+                print(f"[{planner_name}] Environment error: {e}")
 
     elapsed = time.time() - start_time
 
