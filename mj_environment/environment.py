@@ -6,7 +6,7 @@ import numpy as np
 import re
 from xml.etree.ElementTree import Element, SubElement, tostring, parse as ETparse
 from xml.dom import minidom
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any, Optional, Union, overload
 
 
 def _deep_copy_element(elem: Element, parent: Optional[Element] = None) -> Element:
@@ -48,7 +48,7 @@ class Environment:
       - Load all object metadata via AssetManager
       - Dynamically compose a MuJoCo scene XML in memory
       - Initialize Simulation and ObjectRegistry
-      - Provide cloning, updating, and serialization
+      - Provide forking, updating, and serialization
     """
 
     def __init__(
@@ -273,17 +273,6 @@ class Environment:
         self.sim.reset()
 
     # ------------------------------------------------------------------
-    # ✅ Cloning and State Sync
-    # ------------------------------------------------------------------
-    def clone_data(self) -> mujoco.MjData:
-        """Return a deep clone of the current simulation data."""
-        return self.sim.clone_data()
-
-    def update_from_clone(self, cloned_data: mujoco.MjData):
-        """Restore this environment's state from a cloned MjData."""
-        Simulation.copy_data(self.model, self.sim.data, cloned_data)
-
-    # ------------------------------------------------------------------
     # Serialization
     # ------------------------------------------------------------------
     def save_state(self, path: str):
@@ -297,3 +286,108 @@ class Environment:
         for name, is_active in self.registry.active_objects.items():
             body_id = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_BODY, name)
             self.registry._set_body_visibility(body_id, visible=is_active)
+
+    # ------------------------------------------------------------------
+    # Forking for Planning
+    # ------------------------------------------------------------------
+    @overload
+    def fork(self, n: None = None) -> 'Environment': ...
+    @overload
+    def fork(self, n: int) -> List['Environment']: ...
+
+    def fork(self, n: Optional[int] = None) -> Union['Environment', List['Environment']]:
+        """
+        Create fully functional clone(s) with independent state for planning.
+
+        Forked environments share immutable data (MjModel, AssetManager) but have
+        independent simulation state (MjData, ObjectRegistry). This enables:
+        - Motion planning without polluting the original environment
+        - Multiple planners running in parallel on separate forks
+
+        Args:
+            n: Number of forks to create. If None, returns a single Environment.
+               If an integer, returns a list of Environments.
+
+        Returns:
+            A single Environment if n is None, or a list of n Environments.
+
+        Example:
+            # Single fork for planning
+            planning_env = env.fork()
+            planning_env.update([{"name": "cup_0", "pos": [0.1, 0.2, 0.3]}])
+            trajectory = planner.plan(planning_env, goal)
+            # Original env unchanged
+
+            # Multiple forks for parallel planning
+            forks = env.fork(n=4)
+            with ThreadPoolExecutor() as executor:
+                results = list(executor.map(planner.plan, forks))
+
+            # Context manager for explicit scope
+            with env.fork() as planning_env:
+                trajectory = planner.plan(planning_env)
+        """
+        if n is None:
+            return self._create_fork()
+        return [self._create_fork() for _ in range(n)]
+
+    def _create_fork(self) -> 'Environment':
+        """Create a single forked environment."""
+        fork = Environment.__new__(Environment)
+
+        # Shared (immutable)
+        fork.model = self.model
+        fork.asset_manager = self.asset_manager
+        fork.hide_pos = self.hide_pos
+        fork.verbose = self.verbose
+        fork._geom_original_size = self._geom_original_size  # Read-only cache
+
+        # Independent state
+        fork.data = self.sim.clone_data()
+        fork.sim = Simulation(fork.model, fork.data)
+        fork.registry = self.registry.copy(fork.data)
+        fork.state_io = StateIO()
+
+        # Mark as fork (for potential future use)
+        fork._is_fork = True
+
+        return fork
+
+    def sync_from(self, other: 'Environment') -> None:
+        """
+        Synchronize this environment's state from another environment.
+
+        Copies both simulation state (MjData) and object registry state
+        (active objects, visibility). Useful for applying changes from a
+        fork back to the main environment.
+
+        Args:
+            other: The environment to sync from (typically a fork).
+
+        Example:
+            # Fork for perception processing
+            perception_fork = env.fork()
+            perception_fork.update(filtered_detections)
+
+            # Apply processed state back to main
+            env.sync_from(perception_fork)
+        """
+        # Sync MjData (physics state)
+        Simulation.copy_data(self.model, self.data, other.data)
+
+        # Sync ObjectRegistry state (active objects, visibility)
+        self.registry.active_objects = dict(other.registry.active_objects)
+        for name, is_active in self.registry.active_objects.items():
+            body_id = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_BODY, name)
+            self.registry._set_body_visibility(body_id, visible=is_active)
+
+    # ------------------------------------------------------------------
+    # Context Manager Support
+    # ------------------------------------------------------------------
+    def __enter__(self) -> 'Environment':
+        """Enter context manager. Returns self for use in with statements."""
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb) -> None:
+        """Exit context manager. Cleanup is handled by garbage collection."""
+        pass

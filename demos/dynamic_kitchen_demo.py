@@ -1,8 +1,8 @@
 """
 Dynamic Kitchen Demo
 ====================
-Showcases runtime object activation, motion, cloning, and state restoration
-using the refactored mj_environment Environment.
+Showcases runtime object activation, motion, forking, and state serialization
+using the mj_environment Environment.
 """
 
 import mujoco
@@ -13,7 +13,7 @@ from mj_environment.environment import Environment
 
 
 def dynamic_kitchen_demo():
-    """Demonstrate dynamic activation, movement, cloning, and restoration."""
+    """Demonstrate dynamic activation, movement, forking, and state serialization."""
     env = Environment(
         base_scene_xml="data/scene.xml",
         objects_dir="data/objects",
@@ -62,7 +62,6 @@ def dynamic_kitchen_demo():
         setup_camera(viewer)
 
         step_count = 0
-        cloned_state = None
 
         while viewer.is_running():
             # 1️⃣ Activate 2 random object types if none active
@@ -83,32 +82,32 @@ def dynamic_kitchen_demo():
                 })
             env.update(updates, persist=True)
 
-            # 3️⃣ Every 10 steps: clone state, move objects drastically, then restore
+            # 3️⃣ Every 10 steps: demonstrate fork() for planning
             if step_count > 0 and step_count % 10 == 0:
-                print("\n[Clone Demo] Saving state...")
-                cloned_state = env.clone_data()
-                env.save_state("data/state_snapshot.yaml")
+                print("\n[Fork Demo] Creating fork for planning simulation...")
 
-                # Move objects far away temporarily
-                print("[Clone Demo] Moving objects to random positions.")
-                far_updates = []
-                for name in active_names:
-                    far_updates.append({
-                        "name": name,
-                        "pos": [rng.uniform(-0.8, 0.8), rng.uniform(-0.8, 0.8), z_center],
-                        "quat": [1, 0, 0, 0],
-                    })
-                env.update(far_updates, persist=True)
+                # Fork the environment - original stays unchanged
+                with env.fork() as planning_env:
+                    # Simulate planning: move objects in the fork
+                    print("[Fork Demo] Moving objects in forked environment...")
+                    far_updates = []
+                    for name in active_names:
+                        far_updates.append({
+                            "name": name,
+                            "pos": [rng.uniform(-0.8, 0.8), rng.uniform(-0.8, 0.8), z_center],
+                            "quat": [1, 0, 0, 0],
+                        })
+                    planning_env.update(far_updates, persist=True)
 
-                # Wait for visualization
-                for _ in range(5):
-                    viewer.sync()
-                    time.sleep(0.1)
+                    # Step the fork's physics a few times
+                    for _ in range(10):
+                        planning_env.sim.step()
 
-                # Restore from clone
-                print("[Clone Demo] Restoring from cloned state.")
-                env.update_from_clone(cloned_state)
-                env.load_state("data/state_snapshot.yaml")
+                    print(f"[Fork Demo] Fork sim time: {planning_env.data.time:.3f}s")
+                    print(f"[Fork Demo] Original sim time: {env.data.time:.3f}s (unchanged)")
+
+                # Fork is discarded, original env unchanged
+                print("[Fork Demo] Fork discarded, original environment preserved.")
 
             step_count += 1
             viewer.sync()

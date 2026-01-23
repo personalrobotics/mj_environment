@@ -102,36 +102,19 @@ class TestCopyDataModelFix:
         # This should not raise AttributeError about .model
         Simulation.copy_data(env.model, clone, env.data)
 
-    def test_clone_data_works(self, env):
-        """Test that clone_data creates a valid clone."""
+    def test_fork_uses_copy_data_internally(self, env):
+        """Test that fork() properly uses copy_data to clone state."""
         # Activate an object and set a position
         obj_type = next(iter(env.registry.objects))
-        name = env.registry.activate(obj_type, [0.1, 0.2, 0.3])
+        env.registry.activate(obj_type, [0.1, 0.2, 0.3])
         mujoco.mj_forward(env.model, env.data)
 
-        # Clone should work without errors
-        cloned = env.clone_data()
+        # Fork should work and have same state
+        fork = env.fork()
 
-        # Verify clone has same state
-        assert np.allclose(cloned.qpos, env.data.qpos)
-        assert np.allclose(cloned.qvel, env.data.qvel)
-
-    def test_update_from_clone_restores_state(self, env):
-        """Test that update_from_clone properly restores state."""
-        obj_type = next(iter(env.registry.objects))
-        name = env.registry.activate(obj_type, [0.1, 0.2, 0.3])
-        mujoco.mj_forward(env.model, env.data)
-
-        original_qpos = env.data.qpos.copy()
-        cloned = env.clone_data()
-
-        # Move the object
-        env.update([{"name": name, "pos": [0.5, 0.5, 0.5], "quat": [1, 0, 0, 0]}])
-        assert not np.allclose(env.data.qpos, original_qpos)
-
-        # Restore from clone
-        env.update_from_clone(cloned)
-        assert np.allclose(env.data.qpos, original_qpos, atol=1e-6)
+        # Verify fork has same state
+        assert np.allclose(fork.data.qpos, env.data.qpos)
+        assert np.allclose(fork.data.qvel, env.data.qvel)
 
 
 class TestStateLoadVisibilityRestoration:

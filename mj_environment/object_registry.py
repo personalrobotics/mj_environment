@@ -114,15 +114,49 @@ class ObjectRegistry:
                 body_id = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_BODY, instance_name)
                 geom_adr = self.model.body_geomadr[body_id]
                 geom_num = self.model.body_geomnum[body_id]
-                
+
                 # Store original colors for each geom
                 for i in range(geom_num):
                     geom_id = geom_adr + i
                     if geom_id not in self.geom_visibility:
                         self.geom_visibility[geom_id] = self.model.geom_rgba[geom_id].copy()
-                
+
                 # Make all objects invisible initially (they start inactive)
                 self._set_body_visibility(body_id, visible=False)
+
+    def copy(self, new_data: mujoco.MjData) -> 'ObjectRegistry':
+        """
+        Create an independent copy of this registry with new MjData.
+
+        The copy shares the MjModel (immutable) but has independent state tracking.
+        Used by Environment.fork() for creating planning environments.
+
+        Args:
+            new_data: The new MjData instance for the copy to use.
+
+        Returns:
+            A new ObjectRegistry with copied state but independent data.
+        """
+        clone = ObjectRegistry.__new__(ObjectRegistry)
+        clone.model = self.model  # Shared (immutable)
+        clone.data = new_data  # Independent
+        clone.asset_manager = self.asset_manager  # Shared (read-only)
+        clone.hide_pos = self.hide_pos.copy()
+        clone.verbose = self.verbose
+
+        # Deep copy mutable state
+        clone.objects = {
+            obj_type: {
+                "count": info["count"],
+                "instances": list(info["instances"])
+            }
+            for obj_type, info in self.objects.items()
+        }
+        clone.active_objects = dict(self.active_objects)
+        clone.geom_visibility = {k: v.copy() for k, v in self.geom_visibility.items()}
+        clone.scene_cfg = self.scene_cfg  # Read-only after init
+
+        return clone
 
     def _parse_object_type(self, instance_name: str) -> Optional[str]:
         """
