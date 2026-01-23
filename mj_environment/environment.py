@@ -59,8 +59,8 @@ class Environment:
     def __init__(
         self,
         base_scene_xml: str,
-        objects_dir: str,
-        scene_config_yaml: str,
+        objects_dir: Optional[str] = None,
+        scene_config_yaml: Optional[str] = None,
         hide_pos: List[float] = [0, 0, -1],
         verbose: bool = False,
     ):
@@ -74,10 +74,16 @@ class Environment:
             logger.addHandler(handler)
             logger.setLevel(logging.DEBUG)
 
+        # Determine if we have objects to manage
+        self._has_objects = self._check_has_objects(objects_dir, scene_config_yaml)
+
         # ------------------------------------------------------------------
-        # 1️⃣ Asset Manager: load YAML metadata + object XMLs
+        # 1️⃣ Asset Manager: load YAML metadata + object XMLs (if objects exist)
         # ------------------------------------------------------------------
-        self.asset_manager = AssetManager(base_dir=objects_dir, verbose=verbose)
+        if self._has_objects:
+            self.asset_manager: Optional[AssetManager] = AssetManager(base_dir=objects_dir, verbose=verbose)
+        else:
+            self.asset_manager = None
 
         # ------------------------------------------------------------------
         # 2️⃣ Build in-memory XML string for the complete scene
@@ -97,15 +103,19 @@ class Environment:
         # 4️⃣ Apply overrides from meta.yaml (mass, color, scale)
         #    These take priority over values in XML files
         # ------------------------------------------------------------------
-        self._apply_metadata_overrides(scene_config_yaml)
+        if self._has_objects and scene_config_yaml:
+            self._apply_metadata_overrides(scene_config_yaml)
 
         # ------------------------------------------------------------------
         # 5️⃣ Initialize Simulation + Object Registry
         # ------------------------------------------------------------------
         self.sim = Simulation(self.model, self.data)
-        self.registry = ObjectRegistry(
-            self.model, self.data, self.asset_manager, scene_config_yaml, hide_pos, verbose
-        )
+        if self._has_objects and scene_config_yaml:
+            self.registry: Optional[ObjectRegistry] = ObjectRegistry(
+                self.model, self.data, self.asset_manager, scene_config_yaml, hide_pos, verbose
+            )
+        else:
+            self.registry = None
 
         # ------------------------------------------------------------------
         # 6️⃣ Add state I/O helper for serialization
@@ -115,42 +125,68 @@ class Environment:
         # Track whether this is a fork (for potential future use)
         self._is_fork = False
 
-        logger.info("Loaded scene with %d object types", len(self.registry.objects))
+        object_count = len(self.registry.objects) if self.registry else 0
+        logger.info("Loaded scene with %d object types", object_count)
+
+    def _check_has_objects(self, objects_dir: Optional[str], scene_config_yaml: Optional[str]) -> bool:
+        """Check if this environment will manage objects.
+
+        Returns True if objects should be managed, False for robot-only scenes.
+        Raises ConfigurationError if config file is provided but missing.
+        """
+        # Robot-only scene: both must be None
+        if objects_dir is None and scene_config_yaml is None:
+            return False
+
+        # If one is provided but not the other, we still need to validate
+        # For now, treat as no objects if either is missing
+        if objects_dir is None or scene_config_yaml is None:
+            return False
+
+        # Config file provided - must exist (original behavior)
+        if not os.path.exists(scene_config_yaml):
+            raise ConfigurationError(
+                f"Scene config not found: {scene_config_yaml}",
+                path=scene_config_yaml,
+                hint="Ensure the scene_config.yaml file exists at the specified path."
+            )
+
+        with open(scene_config_yaml, "r") as f:
+            cfg = yaml.safe_load(f) or {}
+
+        objects = cfg.get("objects", {})
+        return bool(objects)  # True if non-empty dict
 
     # ======================================================================
     # Internal: Scene Composition
     # ======================================================================
-    def _build_scene_xml_string(self, base_scene_xml: str, scene_yaml: str) -> str:
+    def _build_scene_xml_string(self, base_scene_xml: str, scene_yaml: Optional[str]) -> str:
         """
         Build a MuJoCo scene XML in memory by combining:
         - the base scene (e.g., table, lights, cameras)
-        - all object instances defined in scene_config.yaml
-        """
-        if not os.path.exists(scene_yaml):
-            raise ConfigurationError(
-                f"Scene config file not found: {scene_yaml}",
-                path=scene_yaml,
-                hint="Create the file or check the path passed to Environment().",
-            )
-        with open(scene_yaml, "r") as f:
-            cfg = yaml.safe_load(f)
-        if "objects" not in cfg:
-            raise ConfigurationError(
-                "Scene config must define 'objects' key",
-                path=scene_yaml,
-                hint="Add an 'objects' section with object types and counts.",
-            )
-        scene_cfg = cfg["objects"]
+        - all object instances defined in scene_config.yaml (if provided)
 
+        For robot-only scenes (no objects), scene_yaml can be None.
+        """
         mujoco_el = Element("mujoco", {"model": "autogen_scene"})
         # Convert to absolute path for reliable include resolution
         abs_scene_path = os.path.abspath(base_scene_xml)
         SubElement(mujoco_el, "include", {"file": abs_scene_path})
         worldbody_el = SubElement(mujoco_el, "worldbody")
 
+        # If no scene config or no objects, return robot-only scene
+        if not self._has_objects or scene_yaml is None:
+            xml_bytes = tostring(mujoco_el, "utf-8")
+            return minidom.parseString(xml_bytes).toprettyxml(indent="  ")
+
+        # Load scene config
+        with open(scene_yaml, "r") as f:
+            cfg = yaml.safe_load(f) or {}
+        scene_cfg = cfg.get("objects", {})
+
         for obj_type, entry in scene_cfg.items():
             count = entry.get("count", 1)
-            if obj_type not in self.asset_manager.list():
+            if self.asset_manager is None or obj_type not in self.asset_manager.list():
                 logger.warning("Unknown asset '%s', skipping", obj_type)
                 continue
 
@@ -261,12 +297,15 @@ class Environment:
             ObjectMetadata dict with keys: name, category, mass, color, scale, etc.
 
         Raises:
-            ObjectNotFoundError: If instance_name is not in the registry.
+            ObjectNotFoundError: If instance_name is not in the registry or no objects configured.
 
         Example:
             >>> meta = env.get_object_metadata("plate_1")
             >>> print(meta["mass"], meta["color"], meta["category"])
         """
+        if self.registry is None or self.asset_manager is None:
+            raise ObjectNotFoundError(instance_name, [])
+
         # Find object type by looking up instance_name in the registry
         # This handles cases where object type names have underscores (e.g., "kitchen_knife")
         for registered_type, obj_info in self.registry.objects.items():
@@ -277,7 +316,7 @@ class Environment:
         parsed_type = self.registry._parse_object_type(instance_name)
         if parsed_type is not None and parsed_type in self.asset_manager.list():
             return self.asset_manager.get(parsed_type)
-        
+
         all_instances = list(self.registry.active_objects.keys())
         raise ObjectNotFoundError(instance_name, all_instances)
     
@@ -296,7 +335,12 @@ class Environment:
                 - quat: (optional) Quaternion [w, x, y, z], defaults to [1, 0, 0, 0]
             persist: If False (default), hide objects not in the list.
                      If True, keep previously active objects visible.
+
+        Raises:
+            RuntimeError: If environment has no object management configured.
         """
+        if self.registry is None:
+            raise RuntimeError("Cannot update objects: environment has no object management configured")
         self.registry.update(object_list, persist)  # type: ignore[arg-type]
         mujoco.mj_forward(self.model, self.data)
 
@@ -328,6 +372,15 @@ class Environment:
             >>> for name, state in status['active_objects'].items():
             ...     print(f"  {name}: pos={state['pos']}")
         """
+        # Robot-only environment (no objects)
+        if self.registry is None:
+            return {
+                "time": self.data.time,
+                "active_count": 0,
+                "active_objects": {},
+                "object_types": {},
+            }
+
         active_objects = {}
         for name, is_active in self.registry.active_objects.items():
             if is_active or verbose:
@@ -364,15 +417,18 @@ class Environment:
     # ------------------------------------------------------------------
     def save_state(self, path: str) -> None:
         """Serialize current simulation state to YAML."""
-        self.state_io.save(self.model, self.data, self.registry.active_objects, path)
+        active_objects = self.registry.active_objects if self.registry else {}
+        self.state_io.save(self.model, self.data, active_objects, path)
 
     def load_state(self, path: str) -> None:
         """Load simulation state from YAML."""
-        self.registry.active_objects = self.state_io.load(self.model, self.data, path)
-        # Sync visibility state to match loaded active_objects
-        for name, is_active in self.registry.active_objects.items():
-            body_id = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_BODY, name)
-            self.registry._set_body_visibility(body_id, visible=is_active)
+        active_objects = self.state_io.load(self.model, self.data, path)
+        if self.registry is not None:
+            self.registry.active_objects = active_objects
+            # Sync visibility state to match loaded active_objects
+            for name, is_active in self.registry.active_objects.items():
+                body_id = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_BODY, name)
+                self.registry._set_body_visibility(body_id, visible=is_active)
 
     # ------------------------------------------------------------------
     # Forking for Planning
@@ -428,11 +484,12 @@ class Environment:
         fork.hide_pos = self.hide_pos
         fork.verbose = self.verbose
         fork._geom_original_size = self._geom_original_size  # Read-only cache
+        fork._has_objects = self._has_objects
 
         # Independent state
         fork.data = self.sim.clone_data()
         fork.sim = Simulation(fork.model, fork.data)
-        fork.registry = self.registry.copy(fork.data)
+        fork.registry = self.registry.copy(fork.data) if self.registry else None
         fork.state_io = StateIO()
 
         # Mark as fork (for potential future use)
@@ -462,11 +519,12 @@ class Environment:
         # Sync MjData (physics state)
         Simulation.copy_data(self.model, self.data, other.data)
 
-        # Sync ObjectRegistry state (active objects, visibility)
-        self.registry.active_objects = dict(other.registry.active_objects)
-        for name, is_active in self.registry.active_objects.items():
-            body_id = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_BODY, name)
-            self.registry._set_body_visibility(body_id, visible=is_active)
+        # Sync ObjectRegistry state (active objects, visibility) if objects exist
+        if self.registry is not None and other.registry is not None:
+            self.registry.active_objects = dict(other.registry.active_objects)
+            for name, is_active in self.registry.active_objects.items():
+                body_id = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_BODY, name)
+                self.registry._set_body_visibility(body_id, visible=is_active)
 
     # ------------------------------------------------------------------
     # Context Manager Support
