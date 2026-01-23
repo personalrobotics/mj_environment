@@ -54,7 +54,7 @@ graph LR
     E --> P2[Planner 2]
     E --> P3[Planner 3]
     E --> P4[Planner 4]
-    P1 -->|success| W[Winner]
+    P1 -->|returns| W[Plan]
     P2 -.->|cancelled| X1[discarded]
     P3 -.->|cancelled| X2[discarded]
     P4 -.->|cancelled| X3[discarded]
