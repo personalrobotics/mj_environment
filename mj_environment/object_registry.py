@@ -177,8 +177,15 @@ class ObjectRegistry:
         if self.verbose:
             print(f"[INFO] Hid {name}.")
 
-    def update(self, updates: List[Dict[str, Any]], persist: bool = True):
-        """Batch activate/move/hide objects based on updates."""
+    def update(self, updates: List[Dict[str, Any]], persist: bool = False):
+        """
+        Batch activate/move/hide objects based on updates.
+
+        Args:
+            updates: List of dicts with keys: name, pos, quat (optional)
+            persist: If False (default), hide objects not in updates list.
+                     If True, keep previously active objects visible.
+        """
         active_now = set()
 
         for upd in updates:
