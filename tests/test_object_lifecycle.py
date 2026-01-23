@@ -27,6 +27,6 @@ def test_update_positions(env):
     name = env.registry.activate(obj_type, [0, 0, 0.5])
     new_pos = [0.1, 0.2, 0.3]
     env.update([{"name": name, "pos": new_pos, "quat": [1, 0, 0, 0]}])
-    mujoco.mj_forward(env.model, env.data)
+    # Note: env.update() already calls mj_forward internally
     body_id = mujoco.mj_name2id(env.model, mujoco.mjtObj.mjOBJ_BODY, name)
     assert np.allclose(env.data.xpos[body_id], new_pos, atol=1e-3)
