@@ -72,12 +72,30 @@ for _ in range(100):
 assert env.data.time == 0.0
 ```
 
-For parallel planners:
+For parallel planners with early termination:
 
 ```python
+import threading
+from concurrent.futures import ThreadPoolExecutor, as_completed
+
+cancel = threading.Event()
+
+def run_planner(fork, planner, cancel):
+    for step in planner.steps():
+        if cancel.is_set():
+            return None  # Cancelled
+        fork.sim.step()
+    return planner.get_plan()
+
 forks = env.fork(n=4)
 with ThreadPoolExecutor() as executor:
-    results = list(executor.map(planner.evaluate, forks))
+    futures = [executor.submit(run_planner, f, p, cancel) for f, p in zip(forks, planners)]
+    for future in as_completed(futures):
+        result = future.result()
+        if result is not None:
+            cancel.set()  # Signal others to stop
+            winning_plan = result
+            break
 ```
 
 ### Perception Example
@@ -161,8 +179,9 @@ Values in `meta.yaml` (mass, color, scale) override those in `model.xml`.
 ## Running Demos
 
 ```bash
-./run_demo.sh demos/dynamic_kitchen_demo.py
-./run_demo.sh demos/perception_update_demo.py
+./run_demo.sh demos/dynamic_kitchen_demo.py      # Object activation and forking
+./run_demo.sh demos/perception_update_demo.py    # Perception with fork + sync_from
+python demos/parallel_planning_demo.py           # Parallel planners with cancellation
 ```
 
 ## API Reference
