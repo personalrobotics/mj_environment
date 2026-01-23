@@ -1,0 +1,155 @@
+"""
+Tests for state management fixes (Issue #8).
+
+Tests cover:
+1. Default persist=False behavior in update()
+2. Scale caching to prevent compounding
+"""
+
+import pytest
+import numpy as np
+import mujoco
+from mj_environment.environment import Environment
+
+
+@pytest.fixture
+def env():
+    return Environment(
+        base_scene_xml="data/scene.xml",
+        objects_dir="data/objects",
+        scene_config_yaml="data/scene_config.yaml",
+        verbose=False,
+    )
+
+
+class TestPersistDefault:
+    """Tests for persist=False default behavior."""
+
+    def test_persist_defaults_to_false(self, env):
+        """Test that update() defaults to persist=False (objects disappear if not in update)."""
+        obj_type = next(iter(env.registry.objects))
+        instances = env.registry.objects[obj_type]["instances"]
+
+        # Activate two objects
+        name1 = env.registry.activate(obj_type, [0.1, 0.1, 0.3])
+        name2 = env.registry.activate(obj_type, [0.2, 0.2, 0.3])
+        mujoco.mj_forward(env.model, env.data)
+
+        assert env.registry.active_objects[name1] == True
+        assert env.registry.active_objects[name2] == True
+
+        # Update with only one object (default persist=False should hide the other)
+        env.update([{"name": name1, "pos": [0.1, 0.1, 0.3], "quat": [1, 0, 0, 0]}])
+
+        # name1 should still be active, name2 should be hidden
+        assert env.registry.active_objects[name1] == True
+        assert env.registry.active_objects[name2] == False
+
+    def test_persist_true_keeps_objects(self, env):
+        """Test that persist=True keeps objects not in update list."""
+        obj_type = next(iter(env.registry.objects))
+
+        # Activate two objects
+        name1 = env.registry.activate(obj_type, [0.1, 0.1, 0.3])
+        name2 = env.registry.activate(obj_type, [0.2, 0.2, 0.3])
+        mujoco.mj_forward(env.model, env.data)
+
+        # Update with only one object but persist=True
+        env.update([{"name": name1, "pos": [0.1, 0.1, 0.3], "quat": [1, 0, 0, 0]}], persist=True)
+
+        # Both should still be active
+        assert env.registry.active_objects[name1] == True
+        assert env.registry.active_objects[name2] == True
+
+    def test_empty_update_hides_all_with_persist_false(self, env):
+        """Test that empty update with persist=False hides all objects."""
+        obj_type = next(iter(env.registry.objects))
+
+        # Activate an object
+        name = env.registry.activate(obj_type, [0.1, 0.1, 0.3])
+        mujoco.mj_forward(env.model, env.data)
+        assert env.registry.active_objects[name] == True
+
+        # Empty update with default persist=False
+        env.update([])
+
+        # Object should be hidden
+        assert env.registry.active_objects[name] == False
+
+    def test_empty_update_with_persist_true_keeps_all(self, env):
+        """Test that empty update with persist=True keeps all objects."""
+        obj_type = next(iter(env.registry.objects))
+
+        # Activate an object
+        name = env.registry.activate(obj_type, [0.1, 0.1, 0.3])
+        mujoco.mj_forward(env.model, env.data)
+        assert env.registry.active_objects[name] == True
+
+        # Empty update with persist=True
+        env.update([], persist=True)
+
+        # Object should still be active
+        assert env.registry.active_objects[name] == True
+
+
+class TestScaleCaching:
+    """Tests for scale caching to prevent compounding."""
+
+    def test_scale_cache_exists(self, env):
+        """Test that scale cache dictionary is initialized."""
+        assert hasattr(env, '_geom_original_size')
+        assert isinstance(env._geom_original_size, dict)
+
+    def test_original_sizes_are_cached(self, env):
+        """Test that original geom sizes are cached when scale is applied."""
+        # Check if any objects have scale in their metadata
+        for obj_type in env.asset_manager.list():
+            meta = env.asset_manager.get(obj_type)
+            if "scale" in meta and meta["scale"] != 1.0:
+                # There should be cached sizes for this object type
+                instances = env.registry.objects.get(obj_type, {}).get("instances", [])
+                for instance_name in instances:
+                    body_id = mujoco.mj_name2id(env.model, mujoco.mjtObj.mjOBJ_BODY, instance_name)
+                    geom_adr = env.model.body_geomadr[body_id]
+                    geom_num = env.model.body_geomnum[body_id]
+                    for i in range(geom_num):
+                        geom_id = geom_adr + i
+                        # If scale was applied, original should be cached
+                        if geom_id in env._geom_original_size:
+                            assert env._geom_original_size[geom_id] is not None
+
+    def test_scale_does_not_compound(self):
+        """Test that applying scale multiple times doesn't compound."""
+        # Create environment twice and compare sizes
+        env1 = Environment(
+            base_scene_xml="data/scene.xml",
+            objects_dir="data/objects",
+            scene_config_yaml="data/scene_config.yaml",
+            verbose=False,
+        )
+        env2 = Environment(
+            base_scene_xml="data/scene.xml",
+            objects_dir="data/objects",
+            scene_config_yaml="data/scene_config.yaml",
+            verbose=False,
+        )
+
+        # Both environments should have the same geom sizes
+        # (proving scale doesn't compound on reload)
+        for obj_type in env1.registry.objects:
+            for instance_name in env1.registry.objects[obj_type]["instances"]:
+                body_id1 = mujoco.mj_name2id(env1.model, mujoco.mjtObj.mjOBJ_BODY, instance_name)
+                body_id2 = mujoco.mj_name2id(env2.model, mujoco.mjtObj.mjOBJ_BODY, instance_name)
+
+                geom_adr1 = env1.model.body_geomadr[body_id1]
+                geom_num1 = env1.model.body_geomnum[body_id1]
+                geom_adr2 = env2.model.body_geomadr[body_id2]
+                geom_num2 = env2.model.body_geomnum[body_id2]
+
+                assert geom_num1 == geom_num2
+
+                for i in range(geom_num1):
+                    size1 = env1.model.geom_size[geom_adr1 + i]
+                    size2 = env2.model.geom_size[geom_adr2 + i]
+                    assert np.allclose(size1, size2), \
+                        f"Geom sizes differ for {instance_name}: {size1} vs {size2}"

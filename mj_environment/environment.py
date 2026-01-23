@@ -77,7 +77,10 @@ class Environment:
         # ------------------------------------------------------------------
         self.model = mujoco.MjModel.from_xml_string(xml_string)
         self.data = mujoco.MjData(self.model)
-        
+
+        # Cache for original geom sizes (before scale overrides are applied)
+        self._geom_original_size: Dict[int, np.ndarray] = {}
+
         # ------------------------------------------------------------------
         # 4️⃣ Apply overrides from meta.yaml (mass, color, scale)
         #    These take priority over values in XML files
@@ -211,8 +214,11 @@ class Environment:
                     # Apply scale override
                     if "scale" in meta:
                         scale = float(meta["scale"])
-                        # Scale all dimensions of the geom size
-                        self.model.geom_size[geom_id] *= scale
+                        # Cache original size before scaling (if not already cached)
+                        if geom_id not in self._geom_original_size:
+                            self._geom_original_size[geom_id] = self.model.geom_size[geom_id].copy()
+                        # Apply scale to original size (not current size, to avoid compounding)
+                        self.model.geom_size[geom_id] = self._geom_original_size[geom_id] * scale
                         if self.verbose and geom_idx == 0:
                             print(f"[Override] Applied scale of {scale} to {instance_name}")
 
