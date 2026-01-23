@@ -1,5 +1,6 @@
 """High-level MuJoCo environment orchestrator."""
 
+import logging
 import mujoco
 import yaml
 import numpy as np
@@ -7,6 +8,8 @@ import re
 from xml.etree.ElementTree import Element, SubElement, tostring, parse as ETparse
 from xml.dom import minidom
 from typing import List, Dict, Any, Optional, Union, overload
+
+logger = logging.getLogger(__name__)
 
 
 def _deep_copy_element(elem: Element, parent: Optional[Element] = None) -> Element:
@@ -64,6 +67,13 @@ class Environment:
         self.verbose = verbose
         self.hide_pos = hide_pos
 
+        # Configure logging based on verbose flag (for backward compatibility)
+        if verbose and not logger.handlers:
+            handler = logging.StreamHandler()
+            handler.setFormatter(logging.Formatter("[%(name)s] %(message)s"))
+            logger.addHandler(handler)
+            logger.setLevel(logging.DEBUG)
+
         # ------------------------------------------------------------------
         # 1️⃣ Asset Manager: load YAML metadata + object XMLs
         # ------------------------------------------------------------------
@@ -105,8 +115,7 @@ class Environment:
         # Track whether this is a fork (for potential future use)
         self._is_fork = False
 
-        if verbose:
-            print(f"[Environment] Loaded scene with {len(self.registry.objects)} object types.")
+        logger.info("Loaded scene with %d object types", len(self.registry.objects))
 
     # ======================================================================
     # Internal: Scene Composition
@@ -142,20 +151,17 @@ class Environment:
         for obj_type, entry in scene_cfg.items():
             count = entry.get("count", 1)
             if obj_type not in self.asset_manager.list():
-                if self.verbose:
-                    print(f"[WARN] Unknown asset '{obj_type}', skipping.")
+                logger.warning("Unknown asset '%s', skipping", obj_type)
                 continue
 
             # Get XML path from AssetManager - relies on mujoco.xml_path in meta.yaml
             xml_path = self.asset_manager.get_path(obj_type, "mujoco")
             if xml_path is None:
-                if self.verbose:
-                    print(f"[WARN] No XML path found for '{obj_type}' with simulator 'mujoco', skipping.")
+                logger.warning("No XML path found for '%s' with simulator 'mujoco', skipping", obj_type)
                 continue
-            
+
             if not os.path.exists(xml_path):
-                if self.verbose:
-                    print(f"[WARN] XML file not found for '{obj_type}' at {xml_path}, skipping.")
+                logger.warning("XML file not found for '%s' at %s, skipping", obj_type, xml_path)
                 continue
 
             # Parse object XML to extract worldbody contents
@@ -163,8 +169,7 @@ class Environment:
             obj_root = obj_tree.getroot()
             obj_worldbody = obj_root.find("worldbody")
             if obj_worldbody is None:
-                if self.verbose:
-                    print(f"[WARN] No worldbody found in {xml_path}, skipping.")
+                logger.warning("No worldbody found in %s, skipping", xml_path)
                 continue
 
             for i in range(count):
@@ -213,25 +218,24 @@ class Environment:
                 if "mass" in meta:
                     mass_value = float(meta["mass"])
                     self.model.body_mass[body_id] = mass_value
-                    if self.verbose:
-                        print(f"[Override] Set mass of {instance_name} to {mass_value}")
-                
+                    logger.debug("Set mass of %s to %s", instance_name, mass_value)
+
                 # Apply color and scale overrides to all geoms of this body
                 geom_adr = self.model.body_geomadr[body_id]
                 geom_num = self.model.body_geomnum[body_id]
-                
+
                 for geom_idx in range(geom_num):
                     geom_id = geom_adr + geom_idx
-                    
+
                     # Apply color override
                     if "color" in meta:
                         color = meta["color"]
                         if isinstance(color, list) and len(color) >= 3:
                             rgba = np.array(color[:4] if len(color) >= 4 else color + [1.0], dtype=float)
                             self.model.geom_rgba[geom_id] = rgba
-                            if self.verbose and geom_idx == 0:
-                                print(f"[Override] Set color of {instance_name} to {rgba}")
-                    
+                            if geom_idx == 0:
+                                logger.debug("Set color of %s to %s", instance_name, rgba)
+
                     # Apply scale override
                     if "scale" in meta:
                         scale = float(meta["scale"])
@@ -240,8 +244,8 @@ class Environment:
                             self._geom_original_size[geom_id] = self.model.geom_size[geom_id].copy()
                         # Apply scale to original size (not current size, to avoid compounding)
                         self.model.geom_size[geom_id] = self._geom_original_size[geom_id] * scale
-                        if self.verbose and geom_idx == 0:
-                            print(f"[Override] Applied scale of {scale} to {instance_name}")
+                        if geom_idx == 0:
+                            logger.debug("Applied scale of %s to %s", scale, instance_name)
 
     # ======================================================================
     # Public API
@@ -303,6 +307,57 @@ class Environment:
     def reset(self) -> None:
         """Reset simulation and all objects."""
         self.sim.reset()
+
+    def status(self, verbose: bool = False) -> Dict[str, Any]:
+        """
+        Get current scene status for inspection and debugging.
+
+        Args:
+            verbose: If True, include positions for all objects (not just active).
+
+        Returns:
+            Dict with keys:
+                - time: Current simulation time
+                - active_count: Number of active objects
+                - active_objects: Dict mapping name -> {pos, quat} for active objects
+                - object_types: Dict mapping type -> {total, active, available}
+
+        Example:
+            >>> status = env.status()
+            >>> print(f"Active: {status['active_count']} objects")
+            >>> for name, state in status['active_objects'].items():
+            ...     print(f"  {name}: pos={state['pos']}")
+        """
+        active_objects = {}
+        for name, is_active in self.registry.active_objects.items():
+            if is_active or verbose:
+                body_id = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_BODY, name)
+                joint_adr = self.model.body_jntadr[body_id]
+                qpos_adr = self.model.jnt_qposadr[joint_adr]
+                pos = self.data.qpos[qpos_adr:qpos_adr+3].tolist()
+                quat = self.data.qpos[qpos_adr+3:qpos_adr+7].tolist()
+                active_objects[name] = {
+                    "pos": pos,
+                    "quat": quat,
+                    "active": is_active,
+                }
+
+        object_types = {}
+        for obj_type, info in self.registry.objects.items():
+            instances = info["instances"]
+            active_count = sum(1 for n in instances if self.registry.active_objects.get(n, False))
+            object_types[obj_type] = {
+                "total": len(instances),
+                "active": active_count,
+                "available": len(instances) - active_count,
+            }
+
+        return {
+            "time": self.data.time,
+            "active_count": sum(1 for v in self.registry.active_objects.values() if v),
+            "active_objects": active_objects,
+            "object_types": object_types,
+        }
 
     # ------------------------------------------------------------------
     # Serialization

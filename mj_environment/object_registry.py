@@ -3,6 +3,7 @@ object_registry.py
 Manages object lifecycle (activation, hiding, movement) in MuJoCo.
 """
 
+import logging
 import os
 import yaml
 import mujoco
@@ -14,6 +15,8 @@ from .exceptions import (
     ObjectNotFoundError,
     ConfigurationError,
 )
+
+logger = logging.getLogger(__name__)
 
 
 def _normalize_quat(quat: Union[Sequence[float], np.ndarray]) -> np.ndarray:
@@ -100,8 +103,7 @@ class ObjectRegistry:
         """Track object instances that were preloaded into the MuJoCo model by Environment."""
         for obj_type, entry in self.scene_cfg.items():
             if obj_type not in self.asset_manager.list():
-                if self.verbose:
-                    print(f"[WARN] Unknown asset '{obj_type}', skipping preload.")
+                logger.warning("Unknown asset '%s', skipping preload", obj_type)
                 continue
 
             count = entry.get("count", 1)
@@ -115,11 +117,9 @@ class ObjectRegistry:
                     self.objects[obj_type]["instances"].append(name)
                     self.active_objects[name] = False
                 except (TypeError, AttributeError):
-                    if self.verbose:
-                        print(f"[WARN] Object '{name}' not found in model, skipping.")
+                    logger.warning("Object '%s' not found in model, skipping", name)
 
-            if self.verbose:
-                print(f"[INFO] Preloaded {count} {obj_type}(s).")
+            logger.debug("Preloaded %d %s(s)", count, obj_type)
 
     def _cache_geom_colors(self):
         """Cache the original RGBA colors for all object geoms."""
@@ -220,8 +220,7 @@ class ObjectRegistry:
             raise ObjectTypeNotFoundError(obj_type, list(self.objects.keys()))
         candidates = [n for n in self.objects[obj_type]["instances"] if not self.active_objects[n]]
         if not candidates:
-            if self.verbose:
-                print(f"[WARN] No inactive instances left for '{obj_type}'.")
+            logger.warning("No inactive instances left for '%s'", obj_type)
             return None
         name = candidates[0]
         body_id = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_BODY, name)
@@ -236,8 +235,7 @@ class ObjectRegistry:
         self.data.qvel[qvel_adr:qvel_adr+6] = 0
         self._set_body_visibility(body_id, visible=True)
         self.active_objects[name] = True
-        if self.verbose:
-            print(f"[INFO] Activated {name}.")
+        logger.debug("Activated %s", name)
         return name
 
     def hide(self, name: str):
@@ -255,8 +253,7 @@ class ObjectRegistry:
         self.data.qvel[qvel_adr:qvel_adr+6] = 0
         self._set_body_visibility(body_id, visible=False)
         self.active_objects[name] = False
-        if self.verbose:
-            print(f"[INFO] Hid {name}.")
+        logger.debug("Hid %s", name)
 
     def update(self, updates: List[Dict[str, Any]], persist: bool = False) -> None:
         """
@@ -279,8 +276,7 @@ class ObjectRegistry:
                 # This handles object types with underscores (e.g., kitchen_knife_0 -> kitchen_knife)
                 obj_type = self._parse_object_type(name)
                 if obj_type is None:
-                    if self.verbose:
-                        print(f"[WARN] Could not determine object type for '{name}', skipping.")
+                    logger.warning("Could not determine object type for '%s', skipping", name)
                     continue
                 new_name = self.activate(obj_type, pos, quat)
                 if new_name:
