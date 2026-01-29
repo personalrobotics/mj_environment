@@ -113,7 +113,7 @@ with env.fork() as perception_fork:
 
 ### Perception Aliases
 
-Different perception systems (YCB, COCO, custom detectors) can use their own naming conventions. The AssetManager resolves aliases to object types:
+Different perception systems (YCB, COCO, custom detectors) can use their own naming conventions. The [AssetManager](https://github.com/personalrobotics/asset_manager) resolves aliases to object types:
 
 ```python
 obj_type = env.asset_manager.resolve_alias("coffee cup", module="coco")  # Returns "cup"
