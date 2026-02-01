@@ -36,6 +36,26 @@ def _deep_copy_element(elem: Element, parent: Optional[Element] = None) -> Eleme
 
     return new_elem
 
+
+def _prefix_names_in_subtree(elem: Element, prefix: str) -> None:
+    """
+    Recursively prefix all 'name' attributes in element and descendants.
+
+    This ensures unique names when creating multiple instances of the same object.
+    For example, if prefix is "can_0" and a geom has name="can_body",
+    it becomes name="can_0/can_body".
+
+    Args:
+        elem: Root element to process (modified in place)
+        prefix: Prefix to add to names (e.g., "can_0")
+    """
+    # Skip the root body element itself (already renamed by caller)
+    for child in elem.iter():
+        if child is elem:
+            continue
+        if "name" in child.attrib:
+            child.set("name", f"{prefix}/{child.attrib['name']}")
+
 import os
 from .simulation import Simulation
 from .object_registry import ObjectRegistry
@@ -172,10 +192,10 @@ class Environment:
         # Convert to absolute path for reliable include resolution
         abs_scene_path = os.path.abspath(base_scene_xml)
         SubElement(mujoco_el, "include", {"file": abs_scene_path})
-        worldbody_el = SubElement(mujoco_el, "worldbody")
 
         # If no scene config or no objects, return robot-only scene
         if not self._has_objects or scene_yaml is None:
+            SubElement(mujoco_el, "worldbody")
             xml_bytes = tostring(mujoco_el, "utf-8")
             return minidom.parseString(xml_bytes).toprettyxml(indent="  ")
 
@@ -183,6 +203,34 @@ class Environment:
         with open(scene_yaml, "r") as f:
             cfg = yaml.safe_load(f) or {}
         scene_cfg = cfg.get("objects", {})
+
+        # Collect assets from all object XMLs (only include once per object type)
+        asset_el = SubElement(mujoco_el, "asset")
+        included_assets: set = set()
+
+        for obj_type, entry in scene_cfg.items():
+            if self.asset_manager is None or obj_type not in self.asset_manager.list():
+                continue
+
+            xml_path = self.asset_manager.get_path(obj_type, "mujoco")
+            if xml_path is None or not os.path.exists(xml_path):
+                continue
+
+            # Parse object XML to extract assets
+            obj_tree = ETparse(xml_path)
+            obj_root = obj_tree.getroot()
+            obj_asset = obj_root.find("asset")
+            if obj_asset is not None:
+                for asset_child in obj_asset:
+                    # Use (tag, name) as unique key to avoid duplicates
+                    asset_name = asset_child.get("name", "")
+                    asset_key = (asset_child.tag, asset_name)
+                    if asset_key not in included_assets:
+                        _deep_copy_element(asset_child, asset_el)
+                        included_assets.add(asset_key)
+
+        # Now add worldbody with object instances
+        worldbody_el = SubElement(mujoco_el, "worldbody")
 
         for obj_type, entry in scene_cfg.items():
             count = entry.get("count", 1)
@@ -217,6 +265,8 @@ class Environment:
                     # Update name and position for this instance
                     new_body.set("name", instance_name)
                     new_body.set("pos", f"{self.hide_pos[0]} {self.hide_pos[1]} {self.hide_pos[2]}")
+                    # Prefix all nested element names to avoid conflicts
+                    _prefix_names_in_subtree(new_body, instance_name)
 
         xml_bytes = tostring(mujoco_el, "utf-8")
         return minidom.parseString(xml_bytes).toprettyxml(indent="  ")
