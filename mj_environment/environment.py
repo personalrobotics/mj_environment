@@ -106,15 +106,16 @@ class Environment:
             self.asset_manager = None
 
         # ------------------------------------------------------------------
-        # 2️⃣ Build in-memory XML string for the complete scene
+        # 2️⃣ Build in-memory XML string for the complete scene + assets dict for meshes
         # ------------------------------------------------------------------
-        xml_string = self._build_scene_xml_string(base_scene_xml, scene_config_yaml)
+        xml_string, assets_dict = self._build_scene_xml_string(base_scene_xml, scene_config_yaml)
 
         # ------------------------------------------------------------------
-        # 3️⃣ Create MuJoCo model + data directly from XML string
+        # 3️⃣ Create MuJoCo model + data directly from XML string (with assets dict for mesh files)
         # ------------------------------------------------------------------
-        self.model = mujoco.MjModel.from_xml_string(xml_string)
+        self.model = mujoco.MjModel.from_xml_string(xml_string, assets=assets_dict)
         self.data = mujoco.MjData(self.model)
+        self.assets = assets_dict  # Store assets dict for forking
 
         # Cache for original geom sizes (before scale overrides are applied)
         self._geom_original_size: Dict[int, np.ndarray] = {}
@@ -180,14 +181,20 @@ class Environment:
     # ======================================================================
     # Internal: Scene Composition
     # ======================================================================
-    def _build_scene_xml_string(self, base_scene_xml: str, scene_yaml: Optional[str]) -> str:
+    def _build_scene_xml_string(self, base_scene_xml: str, scene_yaml: Optional[str]) -> tuple[str, dict[str, bytes]]:
         """
         Build a MuJoCo scene XML in memory by combining:
         - the base scene (e.g., table, lights, cameras)
         - all object instances defined in scene_config.yaml (if provided)
 
         For robot-only scenes (no objects), scene_yaml can be None.
+
+        Returns:
+            Tuple of (xml_string, assets_dict) where assets_dict contains mesh files for assets
         """
+        # Create assets dictionary for mesh files
+        assets_dict: dict[str, bytes] = {}
+
         mujoco_el = Element("mujoco", {"model": "autogen_scene"})
         # Convert to absolute path for reliable include resolution
         abs_scene_path = os.path.abspath(base_scene_xml)
@@ -197,7 +204,7 @@ class Environment:
         if not self._has_objects or scene_yaml is None:
             SubElement(mujoco_el, "worldbody")
             xml_bytes = tostring(mujoco_el, "utf-8")
-            return minidom.parseString(xml_bytes).toprettyxml(indent="  ")
+            return minidom.parseString(xml_bytes).toprettyxml(indent="  "), assets_dict
 
         # Load scene config
         with open(scene_yaml, "r") as f:
@@ -228,6 +235,20 @@ class Environment:
                     if asset_key not in included_assets:
                         _deep_copy_element(asset_child, asset_el)
                         included_assets.add(asset_key)
+
+                        # If this is a mesh asset, add the mesh file to assets dict
+                        if asset_child.tag == "mesh":
+                            mesh_file = asset_child.get("file")
+                            if mesh_file:
+                                # Resolve mesh path relative to object XML directory
+                                obj_dir = os.path.dirname(xml_path)
+                                mesh_path = os.path.join(obj_dir, mesh_file)
+                                if os.path.exists(mesh_path):
+                                    with open(mesh_path, 'rb') as f:
+                                        mesh_data = f.read()
+                                    assets_dict[mesh_file] = mesh_data
+                                else:
+                                    logger.warning(f"Mesh file not found: {mesh_path}")
 
         # Now add worldbody with object instances
         worldbody_el = SubElement(mujoco_el, "worldbody")
@@ -269,7 +290,7 @@ class Environment:
                     _prefix_names_in_subtree(new_body, instance_name)
 
         xml_bytes = tostring(mujoco_el, "utf-8")
-        return minidom.parseString(xml_bytes).toprettyxml(indent="  ")
+        return minidom.parseString(xml_bytes).toprettyxml(indent="  "), assets_dict
 
     # ------------------------------------------------------------------
     # Metadata Overrides
@@ -530,6 +551,7 @@ class Environment:
 
         # Shared (immutable)
         fork.model = self.model
+        fork.assets = self.assets  # Assets dict is shared (read-only)
         fork.asset_manager = self.asset_manager
         fork.hide_pos = self.hide_pos
         fork.verbose = self.verbose
