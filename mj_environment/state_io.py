@@ -14,13 +14,36 @@ class StateIO:
     SCHEMA_VERSION = STATE_IO_SCHEMA_VERSION
 
     def save(self, model, data, active_objects, path: str):
-        """Save simulation state. active_objects can be dict or set."""
+        """
+        Save simulation state to YAML file.
+
+        Args:
+            model: MuJoCo model (for validation)
+            data: MuJoCo data containing state
+            active_objects: Dict or set of active object names
+            path: Output file path
+
+        Raises:
+            StateError: If state contains NaN/Inf values or write fails
+        """
+        # Validate state before saving
+        if not np.all(np.isfinite(data.qpos)):
+            raise StateError(
+                "Cannot save: qpos contains NaN or Inf values",
+                hint="Check for physics explosions or invalid object poses.",
+            )
+        if not np.all(np.isfinite(data.qvel)):
+            raise StateError(
+                "Cannot save: qvel contains NaN or Inf values",
+                hint="Check for physics explosions or invalid object velocities.",
+            )
+
         # Convert to dict if needed
         if isinstance(active_objects, dict):
             active_dict = active_objects
         else:
             active_dict = {name: True for name in active_objects}
-        
+
         state = {
             "schema_version": self.SCHEMA_VERSION,
             "qpos": data.qpos.tolist(),
@@ -31,7 +54,24 @@ class StateIO:
             yaml.safe_dump(state, f)
 
     def load(self, model, data, path: str):
-        """Load simulation state. Returns dict of active objects."""
+        """
+        Load simulation state from YAML file.
+
+        Args:
+            model: MuJoCo model (for dimension validation)
+            data: MuJoCo data to restore state into
+            path: Path to state file
+
+        Returns:
+            Dict mapping object names to active status (bool)
+
+        Raises:
+            StateError: If file has incompatible schema or dimensions
+
+        Example:
+            >>> active_objects = state_io.load(model, data, "checkpoint.yaml")
+            >>> env.registry.update_from_dict(active_objects)
+        """
         with open(path, "r") as f:
             state = yaml.safe_load(f)
 

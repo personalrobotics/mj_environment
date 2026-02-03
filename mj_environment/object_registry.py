@@ -14,6 +14,7 @@ from .constants import IDENTITY_QUATERNION, POSITION_DIM, QUATERNION_DIM, DOF_DI
 from .exceptions import (
     ObjectTypeNotFoundError,
     ObjectNotFoundError,
+    ObjectPoolExhaustedError,
     ConfigurationError,
 )
 from .mujoco_helpers import MujocoIndexCache
@@ -201,14 +202,34 @@ class ObjectRegistry:
         obj_type: str,
         pos: Union[Sequence[float], np.ndarray],
         quat: Optional[Union[Sequence[float], np.ndarray]] = None,
-    ) -> Optional[str]:
-        """Activate the next available hidden instance of a given type."""
+    ) -> str:
+        """
+        Activate the next available hidden instance of a given type.
+
+        Args:
+            obj_type: Type of object to activate (e.g., "cup", "can")
+            pos: Position [x, y, z] in meters
+            quat: Orientation quaternion [w, x, y, z]. Defaults to identity.
+
+        Returns:
+            Name of the activated instance (e.g., "cup_0")
+
+        Raises:
+            ObjectTypeNotFoundError: If obj_type not in registry
+            ObjectPoolExhaustedError: If all instances are already active
+            ValueError: If quaternion has near-zero magnitude
+
+        Example:
+            >>> name = registry.activate("cup", [0.5, 0.0, 0.8])
+            >>> print(f"Activated {name}")
+            Activated cup_0
+        """
         if obj_type not in self.objects:
             raise ObjectTypeNotFoundError(obj_type, list(self.objects.keys()))
         candidates = [n for n in self.objects[obj_type]["instances"] if not self.active_objects[n]]
         if not candidates:
-            logger.warning("No inactive instances left for '%s'", obj_type)
-            return None
+            all_instances = self.objects[obj_type]["instances"]
+            raise ObjectPoolExhaustedError(obj_type, len(all_instances), all_instances)
         name = candidates[0]
         indices = self._index_cache.get_body_indices(name)
         self.data.qpos[indices.qpos_adr:indices.qpos_adr+POSITION_DIM] = np.array(pos, dtype=float)
@@ -260,8 +281,7 @@ class ObjectRegistry:
                     logger.warning("Could not determine object type for '%s', skipping", name)
                     continue
                 new_name = self.activate(obj_type, pos, quat)
-                if new_name:
-                    active_now.add(new_name)
+                active_now.add(new_name)
             else:
                 indices = self._index_cache.get_body_indices(name)
                 self.data.qpos[indices.qpos_adr:indices.qpos_adr+POSITION_DIM] = pos
