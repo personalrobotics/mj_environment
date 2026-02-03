@@ -4,13 +4,14 @@ import yaml
 import numpy as np
 import mujoco
 
+from .constants import STATE_IO_SCHEMA_VERSION
 from .exceptions import StateError
 
 
 class StateIO:
     """Serialize and restore simulation state."""
 
-    SCHEMA_VERSION = 1
+    SCHEMA_VERSION = STATE_IO_SCHEMA_VERSION
 
     def save(self, model, data, active_objects, path: str):
         """Save simulation state. active_objects can be dict or set."""

@@ -57,6 +57,8 @@ def _prefix_names_in_subtree(elem: Element, prefix: str) -> None:
             child.set("name", f"{prefix}/{child.attrib['name']}")
 
 import os
+from .constants import POSITION_DIM, QUATERNION_DIM
+from .mujoco_helpers import MujocoIndexCache
 from .simulation import Simulation
 from .object_registry import ObjectRegistry
 from asset_manager import AssetManager
@@ -455,11 +457,9 @@ class Environment:
         active_objects = {}
         for name, is_active in self.registry.active_objects.items():
             if is_active or verbose:
-                body_id = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_BODY, name)
-                joint_adr = self.model.body_jntadr[body_id]
-                qpos_adr = self.model.jnt_qposadr[joint_adr]
-                pos = self.data.qpos[qpos_adr:qpos_adr+3].tolist()
-                quat = self.data.qpos[qpos_adr+3:qpos_adr+7].tolist()
+                indices = self.registry._index_cache.get_body_indices(name)
+                pos = self.data.qpos[indices.qpos_adr:indices.qpos_adr+POSITION_DIM].tolist()
+                quat = self.data.qpos[indices.qpos_adr+POSITION_DIM:indices.qpos_adr+POSITION_DIM+QUATERNION_DIM].tolist()
                 active_objects[name] = {
                     "pos": pos,
                     "quat": quat,

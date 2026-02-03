@@ -11,7 +11,7 @@ import numpy as np
 import mujoco
 import os
 from mj_environment.environment import Environment
-from mj_environment.object_registry import _normalize_quat
+from mj_environment.quaternion import normalize_quaternion
 
 
 @pytest.fixture
@@ -30,35 +30,35 @@ class TestQuaternionNormalization:
     def test_normalize_unit_quaternion(self):
         """Test that unit quaternions are unchanged."""
         quat = np.array([1, 0, 0, 0])
-        result = _normalize_quat(quat)
+        result = normalize_quaternion(quat)
         assert np.allclose(result, quat)
 
     def test_normalize_non_unit_quaternion(self):
         """Test that non-unit quaternions are normalized."""
         quat = np.array([2, 0, 0, 0])  # Not unit length
-        result = _normalize_quat(quat)
+        result = normalize_quaternion(quat)
         assert np.allclose(np.linalg.norm(result), 1.0)
         assert np.allclose(result, [1, 0, 0, 0])
 
     def test_normalize_arbitrary_quaternion(self):
         """Test normalization of arbitrary quaternion."""
         quat = np.array([1, 1, 1, 1])  # Norm = 2
-        result = _normalize_quat(quat)
+        result = normalize_quaternion(quat)
         assert np.allclose(np.linalg.norm(result), 1.0)
         expected = np.array([0.5, 0.5, 0.5, 0.5])
         assert np.allclose(result, expected)
 
     def test_normalize_zero_quaternion(self):
-        """Test that zero quaternion returns identity."""
+        """Test that zero quaternion raises ValueError."""
         quat = np.array([0, 0, 0, 0])
-        result = _normalize_quat(quat)
-        assert np.allclose(result, [1, 0, 0, 0])
+        with pytest.raises(ValueError, match="Cannot normalize near-zero quaternion"):
+            normalize_quaternion(quat)
 
     def test_normalize_near_zero_quaternion(self):
-        """Test that near-zero quaternion returns identity."""
+        """Test that near-zero quaternion raises ValueError."""
         quat = np.array([1e-15, 1e-15, 1e-15, 1e-15])
-        result = _normalize_quat(quat)
-        assert np.allclose(result, [1, 0, 0, 0])
+        with pytest.raises(ValueError, match="Cannot normalize near-zero quaternion"):
+            normalize_quaternion(quat)
 
     def test_activate_normalizes_quaternion(self, env):
         """Test that activate() normalizes quaternions."""
