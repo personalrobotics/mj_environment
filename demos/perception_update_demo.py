@@ -258,7 +258,7 @@ def perception_update_demo():
             if valid_detections:
                 with env.fork() as perception_fork:
                     # Process detections in the fork (could add filtering here)
-                    perception_fork.update(valid_detections, persist=False)
+                    perception_fork.update(valid_detections, hide_unlisted=True)
 
                     # Sync processed state back to main environment
                     env.sync_from(perception_fork)

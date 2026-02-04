@@ -69,8 +69,7 @@ def dynamic_kitchen_demo():
                 selected = rng.choice(object_types, size=2, replace=False)
                 for obj_type in selected:
                     obj_name = env.registry.activate(obj_type, [0, 0, z_center])
-                    if obj_name:
-                        active_names.append(obj_name)
+                    active_names.append(obj_name)
 
             # 2️⃣ Move all active objects to random new positions
             updates = []
@@ -80,7 +79,7 @@ def dynamic_kitchen_demo():
                     "pos": [rng.uniform(-0.4, 0.4), rng.uniform(-0.4, 0.4), z_center],
                     "quat": [1, 0, 0, 0],
                 })
-            env.update(updates, persist=True)
+            env.update(updates, hide_unlisted=False)
 
             # 3️⃣ Every 10 steps: demonstrate fork() for planning
             if step_count > 0 and step_count % 10 == 0:
@@ -97,7 +96,7 @@ def dynamic_kitchen_demo():
                             "pos": [rng.uniform(-0.8, 0.8), rng.uniform(-0.8, 0.8), z_center],
                             "quat": [1, 0, 0, 0],
                         })
-                    planning_env.update(far_updates, persist=True)
+                    planning_env.update(far_updates, hide_unlisted=False)
 
                     # Step the fork's physics a few times
                     for _ in range(10):

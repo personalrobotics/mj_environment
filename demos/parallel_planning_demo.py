@@ -133,7 +133,7 @@ def parallel_planning_demo():
 
     # Create forks for parallel execution
     print(f"\nCreating {len(planners)} forks for parallel planning...")
-    forks = env.fork(n=len(planners))
+    forks = env.fork_many(len(planners))
 
     # Shared cancellation event
     cancel = threading.Event()
