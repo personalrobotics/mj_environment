@@ -42,9 +42,16 @@ env.step()
 
 ## Forking
 
-`fork()` creates lightweight, independent environment clones. This is useful for two scenarios:
+`fork()` creates lightweight, independent environment clones for **physics simulation isolation**. Running `mj_step()` modifies simulation state (time, velocities, positions), so forks let you simulate "what if" scenarios without affecting the main environment.
 
-**Motion planning** — Run multiple planners in parallel, each on its own fork. When one planner succeeds, cancel the others via a shared flag. Forks are discarded after use; the original environment remains unchanged throughout.
+**When you need `fork()`:**
+- Running physics forward in time (`mj_step()`)
+- Evaluating trajectories that modify simulation state
+- Parallel planners that each step their own physics
+- Perception processing with speculative object state changes
+
+**When you don't need `fork()`:**
+- Collision checking during motion planning — planners typically create their own isolated `MjData` copy internally and only call `mj_forward()` (not `mj_step()`), so they don't modify simulation time or velocities.
 
 **Perception processing** — Filter and validate detections in isolation before committing to the main environment. Process noisy sensor data in a fork, then `sync_from()` to apply the cleaned state.
 
