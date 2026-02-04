@@ -102,11 +102,14 @@ class Environment:
             logger.addHandler(handler)
             logger.setLevel(logging.DEBUG)
 
-        # Determine if we have objects to manage
-        self._has_objects = self._check_has_objects(objects_dir, scene_config_yaml)
+        # ------------------------------------------------------------------
+        # 1️⃣ Load scene config and determine if we have objects to manage
+        # ------------------------------------------------------------------
+        self._scene_cfg = self._load_scene_config(objects_dir, scene_config_yaml)
+        self._has_objects = bool(self._scene_cfg)
 
         # ------------------------------------------------------------------
-        # 1️⃣ Asset Manager: load YAML metadata + object XMLs (if objects exist)
+        # 2️⃣ Asset Manager: load YAML metadata + object XMLs (if objects exist)
         # ------------------------------------------------------------------
         if self._has_objects:
             self.asset_manager: Optional[AssetManager] = AssetManager(base_dir=objects_dir, verbose=verbose)
@@ -114,12 +117,12 @@ class Environment:
             self.asset_manager = None
 
         # ------------------------------------------------------------------
-        # 2️⃣ Build in-memory XML string for the complete scene + assets dict for meshes
+        # 3️⃣ Build in-memory XML string for the complete scene + assets dict for meshes
         # ------------------------------------------------------------------
-        xml_string, assets_dict = self._build_scene_xml_string(base_scene_xml, scene_config_yaml)
+        xml_string, assets_dict = self._build_scene_xml_string(base_scene_xml)
 
         # ------------------------------------------------------------------
-        # 3️⃣ Create MuJoCo model + data directly from XML string (with assets dict for mesh files)
+        # 4️⃣ Create MuJoCo model + data directly from XML string (with assets dict for mesh files)
         # ------------------------------------------------------------------
         self.model = mujoco.MjModel.from_xml_string(xml_string, assets=assets_dict)
         self.data = mujoco.MjData(self.model)
@@ -129,25 +132,25 @@ class Environment:
         self._geom_original_size: Dict[int, np.ndarray] = {}
 
         # ------------------------------------------------------------------
-        # 4️⃣ Apply overrides from meta.yaml (mass, color, scale)
+        # 5️⃣ Apply overrides from meta.yaml (mass, color, scale)
         #    These take priority over values in XML files
         # ------------------------------------------------------------------
-        if self._has_objects and scene_config_yaml:
-            self._apply_metadata_overrides(scene_config_yaml)
+        if self._has_objects:
+            self._apply_metadata_overrides()
 
         # ------------------------------------------------------------------
-        # 5️⃣ Initialize Simulation + Object Registry
+        # 6️⃣ Initialize Simulation + Object Registry
         # ------------------------------------------------------------------
         self.sim = Simulation(self.model, self.data)
-        if self._has_objects and scene_config_yaml:
+        if self._has_objects:
             self.registry: Optional[ObjectRegistry] = ObjectRegistry(
-                self.model, self.data, self.asset_manager, scene_config_yaml, hide_pos, verbose
+                self.model, self.data, self.asset_manager, self._scene_cfg, hide_pos, verbose
             )
         else:
             self.registry = None
 
         # ------------------------------------------------------------------
-        # 6️⃣ Add state I/O helper for serialization
+        # 7️⃣ Add state I/O helper for serialization
         # ------------------------------------------------------------------
         self.state_io = StateIO()
 
@@ -157,22 +160,23 @@ class Environment:
         object_count = len(self.registry.objects) if self.registry else 0
         logger.info("Loaded scene with %d object types", object_count)
 
-    def _check_has_objects(self, objects_dir: Optional[str], scene_config_yaml: Optional[str]) -> bool:
-        """Check if this environment will manage objects.
+    def _load_scene_config(
+        self, objects_dir: Optional[str], scene_config_yaml: Optional[str]
+    ) -> Dict[str, Any]:
+        """Load and validate scene configuration.
 
-        Returns True if objects should be managed, False for robot-only scenes.
-        Raises ConfigurationError if config file is provided but missing.
+        Returns the objects dict from scene_config.yaml, or empty dict for robot-only scenes.
+        Raises ConfigurationError if config file is provided but missing/invalid.
         """
-        # Robot-only scene: both must be None
+        # Robot-only scene: no config needed
         if objects_dir is None and scene_config_yaml is None:
-            return False
+            return {}
 
-        # If one is provided but not the other, we still need to validate
-        # For now, treat as no objects if either is missing
+        # If one is provided but not the other, treat as robot-only
         if objects_dir is None or scene_config_yaml is None:
-            return False
+            return {}
 
-        # Config file provided - must exist (original behavior)
+        # Config file provided - must exist
         if not os.path.exists(scene_config_yaml):
             raise ConfigurationError(
                 f"Scene config not found: {scene_config_yaml}",
@@ -183,19 +187,16 @@ class Environment:
         with open(scene_config_yaml, "r") as f:
             cfg = yaml.safe_load(f) or {}
 
-        objects = cfg.get("objects", {})
-        return bool(objects)  # True if non-empty dict
+        return cfg.get("objects", {})
 
     # ======================================================================
     # Internal: Scene Composition
     # ======================================================================
-    def _build_scene_xml_string(self, base_scene_xml: str, scene_yaml: Optional[str]) -> tuple[str, dict[str, bytes]]:
+    def _build_scene_xml_string(self, base_scene_xml: str) -> tuple[str, dict[str, bytes]]:
         """
         Build a MuJoCo scene XML in memory by combining:
         - the base scene (e.g., table, lights, cameras)
-        - all object instances defined in scene_config.yaml (if provided)
-
-        For robot-only scenes (no objects), scene_yaml can be None.
+        - all object instances from self._scene_cfg
 
         Returns:
             Tuple of (xml_string, assets_dict) where assets_dict contains mesh files for assets
@@ -207,62 +208,79 @@ class Environment:
         SubElement(mujoco_el, "include", {"file": abs_scene_path})
 
         # Robot-only scene: no objects to add
-        if not self._has_objects or scene_yaml is None:
+        if not self._has_objects:
             SubElement(mujoco_el, "worldbody")
             xml_bytes = tostring(mujoco_el, "utf-8")
             return minidom.parseString(xml_bytes).toprettyxml(indent="  "), assets_dict
 
-        # Load scene config
-        with open(scene_yaml, "r") as f:
-            cfg = yaml.safe_load(f) or {}
-        scene_cfg = cfg.get("objects", {})
+        # Parse object XMLs once and cache them
+        parsed_objects = self._parse_object_xmls()
 
         # Collect assets and mesh files from object XMLs
         asset_el = SubElement(mujoco_el, "asset")
-        self._collect_object_assets(scene_cfg, asset_el, assets_dict)
+        self._collect_object_assets(parsed_objects, asset_el, assets_dict)
 
         # Add object instances to worldbody
         worldbody_el = SubElement(mujoco_el, "worldbody")
-        self._add_object_instances(scene_cfg, worldbody_el)
+        self._add_object_instances(parsed_objects, worldbody_el)
 
         xml_bytes = tostring(mujoco_el, "utf-8")
         return minidom.parseString(xml_bytes).toprettyxml(indent="  "), assets_dict
 
+    def _parse_object_xmls(self) -> Dict[str, Dict[str, Any]]:
+        """
+        Parse all object XMLs once and return cached data.
+
+        Returns:
+            Dict mapping obj_type to {xml_path, root, count} for each valid object
+        """
+        parsed = {}
+
+        for obj_type, entry in self._scene_cfg.items():
+            if self.asset_manager is None or obj_type not in self.asset_manager.list():
+                logger.warning("Unknown asset '%s', skipping", obj_type)
+                continue
+
+            xml_path = self.asset_manager.get_path(obj_type, "mujoco")
+            if xml_path is None:
+                logger.warning("No XML path for '%s' with simulator 'mujoco', skipping", obj_type)
+                continue
+
+            if not os.path.exists(xml_path):
+                logger.warning("XML file not found for '%s' at %s, skipping", obj_type, xml_path)
+                continue
+
+            obj_tree = ETparse(xml_path)
+            parsed[obj_type] = {
+                'xml_path': xml_path,
+                'root': obj_tree.getroot(),
+                'count': entry.get("count", 1),
+            }
+
+        return parsed
+
     def _collect_object_assets(
         self,
-        scene_cfg: Dict[str, Any],
+        parsed_objects: Dict[str, Dict[str, Any]],
         asset_el: Element,
         assets_dict: dict[str, bytes],
     ) -> None:
         """
-        Collect asset definitions and mesh files from object XMLs.
-
-        Parses each object's XML to extract <asset> children (materials, meshes, etc.)
-        and loads mesh binary data into assets_dict for MuJoCo.
+        Collect asset definitions and mesh files from parsed object XMLs.
 
         Args:
-            scene_cfg: Object configuration from scene_config.yaml
+            parsed_objects: Dict from _parse_object_xmls()
             asset_el: Parent <asset> element to add children to
             assets_dict: Dictionary to populate with mesh file data
         """
         included_assets: set = set()
 
-        for obj_type in scene_cfg:
-            if self.asset_manager is None or obj_type not in self.asset_manager.list():
-                continue
-
-            xml_path = self.asset_manager.get_path(obj_type, "mujoco")
-            if xml_path is None or not os.path.exists(xml_path):
-                continue
-
-            obj_tree = ETparse(xml_path)
-            obj_root = obj_tree.getroot()
-            obj_asset = obj_root.find("asset")
+        for obj_type, obj_data in parsed_objects.items():
+            obj_asset = obj_data['root'].find("asset")
             if obj_asset is None:
                 continue
 
             for asset_child in obj_asset:
-                # Use (tag, name) as unique key to avoid duplicates
                 asset_name = asset_child.get("name", "")
                 asset_key = (asset_child.tag, asset_name)
                 if asset_key in included_assets:
@@ -271,9 +289,8 @@ class Environment:
                 _deep_copy_element(asset_child, asset_el)
                 included_assets.add(asset_key)
 
-                # Load mesh binary data if this is a mesh asset
                 if asset_child.tag == "mesh":
-                    self._load_mesh_file(xml_path, asset_child, assets_dict)
+                    self._load_mesh_file(obj_data['xml_path'], asset_child, assets_dict)
 
     def _load_mesh_file(
         self,
@@ -304,7 +321,7 @@ class Environment:
 
     def _add_object_instances(
         self,
-        scene_cfg: Dict[str, Any],
+        parsed_objects: Dict[str, Dict[str, Any]],
         worldbody_el: Element,
     ) -> None:
         """
@@ -314,33 +331,16 @@ class Environment:
         positioning them at hide_pos and prefixing nested element names.
 
         Args:
-            scene_cfg: Object configuration from scene_config.yaml
+            parsed_objects: Dict from _parse_object_xmls()
             worldbody_el: The <worldbody> element to add bodies to
         """
-        for obj_type, entry in scene_cfg.items():
-            count = entry.get("count", 1)
-
-            if self.asset_manager is None or obj_type not in self.asset_manager.list():
-                logger.warning("Unknown asset '%s', skipping", obj_type)
-                continue
-
-            xml_path = self.asset_manager.get_path(obj_type, "mujoco")
-            if xml_path is None:
-                logger.warning("No XML path for '%s' with simulator 'mujoco', skipping", obj_type)
-                continue
-
-            if not os.path.exists(xml_path):
-                logger.warning("XML file not found for '%s' at %s, skipping", obj_type, xml_path)
-                continue
-
-            obj_tree = ETparse(xml_path)
-            obj_root = obj_tree.getroot()
-            obj_worldbody = obj_root.find("worldbody")
+        for obj_type, obj_data in parsed_objects.items():
+            obj_worldbody = obj_data['root'].find("worldbody")
             if obj_worldbody is None:
-                logger.warning("No worldbody found in %s, skipping", xml_path)
+                logger.warning("No worldbody found in %s, skipping", obj_data['xml_path'])
                 continue
 
-            for i in range(count):
+            for i in range(obj_data['count']):
                 instance_name = f"{obj_type}_{i}"
                 for obj_body in obj_worldbody.findall("body"):
                     new_body = _deep_copy_element(obj_body, worldbody_el)
@@ -351,17 +351,13 @@ class Environment:
     # ------------------------------------------------------------------
     # Metadata Overrides
     # ------------------------------------------------------------------
-    def _apply_metadata_overrides(self, scene_config_yaml: str):
+    def _apply_metadata_overrides(self) -> None:
         """Apply mass, color, and scale overrides from meta.yaml to the model.
-        
+
         These overrides take priority over values specified in the XML files.
+        Uses self._scene_cfg loaded during __init__.
         """
-        
-        with open(scene_config_yaml, "r") as f:
-            cfg = yaml.safe_load(f)
-        scene_cfg = cfg.get("objects", {})
-        
-        for obj_type, entry in scene_cfg.items():
+        for obj_type, entry in self._scene_cfg.items():
             if obj_type not in self.asset_manager.list():
                 continue
             

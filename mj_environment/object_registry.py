@@ -4,9 +4,8 @@ Manages object lifecycle (activation, hiding, movement) in MuJoCo.
 """
 
 import logging
-import os
 import warnings
-import yaml
+
 import mujoco
 import numpy as np
 from typing import Dict, List, Any, Optional, Union, Sequence
@@ -16,7 +15,6 @@ from .exceptions import (
     ObjectTypeNotFoundError,
     ObjectNotFoundError,
     ObjectPoolExhaustedError,
-    ConfigurationError,
 )
 from .mujoco_helpers import MujocoIndexCache
 from .quaternion import normalize_quaternion
@@ -53,10 +51,30 @@ class ObjectRegistry:
         and process them on a single thread (see perception_update_demo.py).
     """
 
-    def __init__(self, model, data, asset_manager, scene_config_yaml, hide_pos=[0, 0, -1], verbose=False):
+    def __init__(
+        self,
+        model,
+        data,
+        asset_manager,
+        scene_cfg: Dict[str, Any],
+        hide_pos=[0, 0, -1],
+        verbose=False,
+    ):
+        """
+        Initialize ObjectRegistry.
+
+        Args:
+            model: MuJoCo model
+            data: MuJoCo data
+            asset_manager: AssetManager instance
+            scene_cfg: Objects dict from scene_config.yaml (already loaded by Environment)
+            hide_pos: Position for hidden objects
+            verbose: Enable debug logging
+        """
         self.model = model
         self.data = data
         self.asset_manager = asset_manager
+        self.scene_cfg = scene_cfg
         self.hide_pos = np.array(hide_pos, dtype=float)
         self.verbose = verbose
         self.objects: Dict[str, Dict[str, Any]] = {}
@@ -64,29 +82,8 @@ class ObjectRegistry:
         self.geom_visibility: Dict[int, np.ndarray] = {}  # Cache original geom colors
         self._index_cache = MujocoIndexCache(model)  # Cache for body/joint indices
 
-        self._load_scene_config(scene_config_yaml)
         self._preload_objects()
         self._cache_geom_colors()
-
-    # ------------------------------------------------------------------
-    # Scene configuration
-    # ------------------------------------------------------------------
-    def _load_scene_config(self, yaml_path: str):
-        if not os.path.exists(yaml_path):
-            raise ConfigurationError(
-                f"Scene config file not found: {yaml_path}",
-                path=yaml_path,
-                hint="Create the file or check the path passed to Environment().",
-            )
-        with open(yaml_path, "r") as f:
-            cfg = yaml.safe_load(f)
-        if "objects" not in cfg:
-            raise ConfigurationError(
-                f"Scene config must define 'objects' key",
-                path=yaml_path,
-                hint="Add an 'objects' section with object types and counts.",
-            )
-        self.scene_cfg = cfg["objects"]
 
     # ------------------------------------------------------------------
     # Object preloading
