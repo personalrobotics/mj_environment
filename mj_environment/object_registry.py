@@ -5,6 +5,7 @@ Manages object lifecycle (activation, hiding, movement) in MuJoCo.
 
 import logging
 import os
+import warnings
 import yaml
 import mujoco
 import numpy as np
@@ -257,15 +258,46 @@ class ObjectRegistry:
         self.active_objects[name] = False
         logger.debug("Hid %s", name)
 
-    def update(self, updates: List[Dict[str, Any]], persist: bool = False) -> None:
+    def update(
+        self,
+        updates: List[Dict[str, Any]],
+        hide_unlisted: Optional[bool] = None,
+        persist: Optional[bool] = None,
+    ) -> None:
         """
         Batch activate/move/hide objects based on updates.
 
         Args:
             updates: List of dicts with keys: name, pos, quat (optional)
-            persist: If False (default), hide objects not in updates list.
-                     If True, keep previously active objects visible.
+            hide_unlisted: If True (default), hide objects not in updates list.
+                          If False, keep previously active objects visible.
+            persist: DEPRECATED. Use hide_unlisted instead.
+                    persist=False is equivalent to hide_unlisted=True
+                    persist=True is equivalent to hide_unlisted=False
+
+        Example:
+            >>> # Hide objects not in the list (default)
+            >>> registry.update([{"name": "cup_0", "pos": [0, 0, 0.5]}])
+            >>> # Keep previously active objects
+            >>> registry.update([...], hide_unlisted=False)
         """
+        # Handle parameter deprecation
+        if persist is not None:
+            warnings.warn(
+                "The 'persist' parameter is deprecated and will be removed in v2.0. "
+                "Use 'hide_unlisted' instead: persist=False -> hide_unlisted=True, "
+                "persist=True -> hide_unlisted=False",
+                DeprecationWarning,
+                stacklevel=2
+            )
+            if hide_unlisted is None:
+                hide_unlisted = not persist  # Invert logic
+            # If both provided, hide_unlisted takes precedence (ignore persist)
+
+        # Default behavior: hide unlisted objects
+        if hide_unlisted is None:
+            hide_unlisted = True
+
         active_now = set()
 
         for upd in updates:
@@ -293,7 +325,7 @@ class ObjectRegistry:
                 self.active_objects[name] = True
                 active_now.add(name)
 
-        if not persist:
+        if hide_unlisted:
             for name, active in list(self.active_objects.items()):
                 if active and name not in active_now:
                     self.hide(name)

@@ -46,7 +46,7 @@ class TestPersistDefault:
         assert env.registry.active_objects[name2] == False
 
     def test_persist_true_keeps_objects(self, env):
-        """Test that persist=True keeps objects not in update list."""
+        """Test that hide_unlisted=False keeps objects not in update list."""
         obj_type = next(iter(env.registry.objects))
 
         # Activate two objects
@@ -54,8 +54,8 @@ class TestPersistDefault:
         name2 = env.registry.activate(obj_type, [0.2, 0.2, 0.3])
         mujoco.mj_forward(env.model, env.data)
 
-        # Update with only one object but persist=True
-        env.update([{"name": name1, "pos": [0.1, 0.1, 0.3], "quat": [1, 0, 0, 0]}], persist=True)
+        # Update with only one object but hide_unlisted=False
+        env.update([{"name": name1, "pos": [0.1, 0.1, 0.3], "quat": [1, 0, 0, 0]}], hide_unlisted=False)
 
         # Both should still be active
         assert env.registry.active_objects[name1] == True
@@ -77,7 +77,7 @@ class TestPersistDefault:
         assert env.registry.active_objects[name] == False
 
     def test_empty_update_with_persist_true_keeps_all(self, env):
-        """Test that empty update with persist=True keeps all objects."""
+        """Test that empty update with hide_unlisted=False keeps all objects."""
         obj_type = next(iter(env.registry.objects))
 
         # Activate an object
@@ -85,8 +85,8 @@ class TestPersistDefault:
         mujoco.mj_forward(env.model, env.data)
         assert env.registry.active_objects[name] == True
 
-        # Empty update with persist=True
-        env.update([], persist=True)
+        # Empty update with hide_unlisted=False
+        env.update([], hide_unlisted=False)
 
         # Object should still be active
         assert env.registry.active_objects[name] == True
