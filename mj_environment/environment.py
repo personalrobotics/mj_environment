@@ -1,14 +1,17 @@
 """High-level MuJoCo environment orchestrator."""
 
+# Standard library
 import logging
+import os
 import warnings
-import mujoco
-import yaml
-import numpy as np
-import re
-from xml.etree.ElementTree import Element, SubElement, tostring, parse as ETparse
-from xml.dom import minidom
 from typing import List, Dict, Any, Optional, Union, overload
+from xml.dom import minidom
+from xml.etree.ElementTree import Element, SubElement, tostring, parse as ETparse
+
+# Third-party
+import mujoco
+import numpy as np
+import yaml
 
 logger = logging.getLogger(__name__)
 
@@ -57,14 +60,16 @@ def _prefix_names_in_subtree(elem: Element, prefix: str) -> None:
         if "name" in child.attrib:
             child.set("name", f"{prefix}/{child.attrib['name']}")
 
-import os
-from .constants import POSITION_DIM, QUATERNION_DIM
-from .mujoco_helpers import MujocoIndexCache
-from .simulation import Simulation
-from .object_registry import ObjectRegistry
+# Third-party (external package)
 from asset_manager import AssetManager
-from .state_io import StateIO
+
+# Local
+from .constants import POSITION_DIM, QUATERNION_DIM
 from .exceptions import ConfigurationError, ObjectNotFoundError
+from .mujoco_helpers import MujocoIndexCache
+from .object_registry import ObjectRegistry
+from .simulation import Simulation
+from .state_io import StateIO
 from .types import Detection, ObjectMetadata
 
 
