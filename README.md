@@ -50,7 +50,7 @@ env.step()
 
 ```mermaid
 graph LR
-    E[Environment] -->|fork n=4| P1[Planner 1]
+    E[Environment] -->|fork_many 4| P1[Planner 1]
     E --> P2[Planner 2]
     E --> P3[Planner 3]
     E --> P4[Planner 4]
@@ -91,7 +91,7 @@ def run_planner(fork, planner, cancel):
         fork.sim.step()
     return planner.get_plan()
 
-forks = env.fork(n=4)
+forks = env.fork_many(4)
 with ThreadPoolExecutor() as executor:
     futures = [executor.submit(run_planner, f, p, cancel) for f, p in zip(forks, planners)]
     for future in as_completed(futures):
@@ -107,7 +107,7 @@ with ThreadPoolExecutor() as executor:
 ```python
 # Fork for perception processing - sync back when done
 with env.fork() as perception_fork:
-    perception_fork.update(filtered_detections, persist=False)
+    perception_fork.update(filtered_detections, hide_unlisted=True)
     env.sync_from(perception_fork)
 ```
 
@@ -218,8 +218,9 @@ Available exceptions:
 
 | Method | Description |
 |--------|-------------|
-| `update(detections, persist=False)` | Batch activate/move/hide objects |
-| `fork(n=None)` | Create independent clone(s) for planning |
+| `update(detections, hide_unlisted=True)` | Batch activate/move/hide objects |
+| `fork()` | Create independent clone for planning |
+| `fork_many(n)` | Create multiple independent clones |
 | `sync_from(other)` | Copy state from another environment |
 | `step(ctrl=None)` | Advance physics simulation |
 | `reset()` | Reset simulation state |
@@ -234,7 +235,9 @@ Available exceptions:
 |--------|-------------|
 | `activate(obj_type, pos, quat=None)` | Show an inactive object instance |
 | `hide(name)` | Hide an active object |
-| `update(detections, persist=False)` | Batch process detections |
+| `update(detections, hide_unlisted=True)` | Batch process detections |
+| `is_active(name)` | Check if an object is currently active |
+| `get_active_instances(obj_type=None)` | Get list of active object names |
 
 ## Logging
 
