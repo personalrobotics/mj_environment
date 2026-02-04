@@ -122,6 +122,54 @@ class TestPathHandling:
         assert env.model is not None
 
 
+class TestUpdateInputValidation:
+    """Tests for input validation in update()."""
+
+    def test_update_rejects_non_list(self, env):
+        """Test that update() raises TypeError for non-list input."""
+        with pytest.raises(TypeError, match="updates must be a list"):
+            env.registry.update("not a list")
+
+    def test_update_rejects_non_dict_items(self, env):
+        """Test that update() raises TypeError for non-dict items."""
+        with pytest.raises(TypeError, match=r"updates\[0\] must be a dict"):
+            env.registry.update(["not a dict"])
+
+    def test_update_rejects_missing_name(self, env):
+        """Test that update() raises ValueError for missing 'name' key."""
+        with pytest.raises(ValueError, match=r"updates\[0\] missing required key 'name'"):
+            env.registry.update([{"pos": [0, 0, 0]}])
+
+    def test_update_rejects_missing_pos(self, env):
+        """Test that update() raises ValueError for missing 'pos' key."""
+        obj_type = next(iter(env.registry.objects))
+        name = f"{obj_type}_0"
+        with pytest.raises(ValueError, match=r"missing required key 'pos'"):
+            env.registry.update([{"name": name}])
+
+    def test_update_rejects_wrong_pos_length(self, env):
+        """Test that update() raises ValueError for wrong pos length."""
+        obj_type = next(iter(env.registry.objects))
+        name = f"{obj_type}_0"
+        with pytest.raises(ValueError, match=r"'pos' must have 3 elements"):
+            env.registry.update([{"name": name, "pos": [0, 0]}])
+
+    def test_update_rejects_non_sequence_pos(self, env):
+        """Test that update() raises ValueError for non-sequence pos."""
+        obj_type = next(iter(env.registry.objects))
+        name = f"{obj_type}_0"
+        with pytest.raises(ValueError, match=r"'pos' must be a sequence"):
+            env.registry.update([{"name": name, "pos": 123}])
+
+    def test_update_accepts_valid_input(self, env):
+        """Test that update() accepts valid input."""
+        obj_type = next(iter(env.registry.objects))
+        name = f"{obj_type}_0"
+        # Should not raise
+        env.registry.update([{"name": name, "pos": [0.1, 0.2, 0.3]}])
+        assert env.registry.is_active(name)
+
+
 class TestThreadSafetyDocumentation:
     """Tests to verify thread safety documentation exists."""
 

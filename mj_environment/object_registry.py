@@ -281,12 +281,34 @@ class ObjectRegistry:
                     persist=False is equivalent to hide_unlisted=True
                     persist=True is equivalent to hide_unlisted=False
 
+        Raises:
+            TypeError: If updates is not a list
+            ValueError: If any update dict is missing required keys or has invalid values
+
         Example:
             >>> # Hide objects not in the list (default)
             >>> registry.update([{"name": "cup_0", "pos": [0, 0, 0.5]}])
             >>> # Keep previously active objects
             >>> registry.update([...], hide_unlisted=False)
         """
+        # Input validation
+        if not isinstance(updates, list):
+            raise TypeError(f"updates must be a list, got {type(updates).__name__}")
+
+        for i, upd in enumerate(updates):
+            if not isinstance(upd, dict):
+                raise TypeError(f"updates[{i}] must be a dict, got {type(upd).__name__}")
+            if "name" not in upd:
+                raise ValueError(f"updates[{i}] missing required key 'name'")
+            if "pos" not in upd:
+                raise ValueError(f"updates[{i}] missing required key 'pos' (name={upd['name']!r})")
+            pos = upd["pos"]
+            try:
+                if len(pos) != 3:
+                    raise ValueError(f"updates[{i}] 'pos' must have 3 elements, got {len(pos)} (name={upd['name']!r})")
+            except TypeError:
+                raise ValueError(f"updates[{i}] 'pos' must be a sequence, got {type(pos).__name__} (name={upd['name']!r})")
+
         # Handle parameter deprecation
         if persist is not None:
             warnings.warn(
@@ -351,6 +373,21 @@ class ObjectRegistry:
             ...     print("Cup is visible")
         """
         return self.active_objects.get(name, False)
+
+    def sync_visibility(self) -> None:
+        """
+        Synchronize geom visibility with active_objects state.
+
+        Updates the visual appearance (RGBA alpha) of all object geoms
+        to match their active/inactive status. Call this after directly
+        modifying active_objects dict (e.g., after loading state).
+
+        This is an internal method used by Environment.load_state() and
+        Environment.sync_from() to ensure visual consistency.
+        """
+        for name, is_active in self.active_objects.items():
+            indices = self._index_cache.get_body_indices(name)
+            self._set_body_visibility(indices.body_id, visible=is_active)
 
     def get_active_instances(self, obj_type: Optional[str] = None) -> List[str]:
         """

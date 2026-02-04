@@ -200,15 +200,13 @@ class Environment:
         Returns:
             Tuple of (xml_string, assets_dict) where assets_dict contains mesh files for assets
         """
-        # Create assets dictionary for mesh files
         assets_dict: dict[str, bytes] = {}
 
         mujoco_el = Element("mujoco", {"model": "autogen_scene"})
-        # Convert to absolute path for reliable include resolution
         abs_scene_path = os.path.abspath(base_scene_xml)
         SubElement(mujoco_el, "include", {"file": abs_scene_path})
 
-        # If no scene config or no objects, return robot-only scene
+        # Robot-only scene: no objects to add
         if not self._has_objects or scene_yaml is None:
             SubElement(mujoco_el, "worldbody")
             xml_bytes = tostring(mujoco_el, "utf-8")
@@ -219,11 +217,37 @@ class Environment:
             cfg = yaml.safe_load(f) or {}
         scene_cfg = cfg.get("objects", {})
 
-        # Collect assets from all object XMLs (only include once per object type)
+        # Collect assets and mesh files from object XMLs
         asset_el = SubElement(mujoco_el, "asset")
+        self._collect_object_assets(scene_cfg, asset_el, assets_dict)
+
+        # Add object instances to worldbody
+        worldbody_el = SubElement(mujoco_el, "worldbody")
+        self._add_object_instances(scene_cfg, worldbody_el)
+
+        xml_bytes = tostring(mujoco_el, "utf-8")
+        return minidom.parseString(xml_bytes).toprettyxml(indent="  "), assets_dict
+
+    def _collect_object_assets(
+        self,
+        scene_cfg: Dict[str, Any],
+        asset_el: Element,
+        assets_dict: dict[str, bytes],
+    ) -> None:
+        """
+        Collect asset definitions and mesh files from object XMLs.
+
+        Parses each object's XML to extract <asset> children (materials, meshes, etc.)
+        and loads mesh binary data into assets_dict for MuJoCo.
+
+        Args:
+            scene_cfg: Object configuration from scene_config.yaml
+            asset_el: Parent <asset> element to add children to
+            assets_dict: Dictionary to populate with mesh file data
+        """
         included_assets: set = set()
 
-        for obj_type, entry in scene_cfg.items():
+        for obj_type in scene_cfg:
             if self.asset_manager is None or obj_type not in self.asset_manager.list():
                 continue
 
@@ -231,53 +255,84 @@ class Environment:
             if xml_path is None or not os.path.exists(xml_path):
                 continue
 
-            # Parse object XML to extract assets
             obj_tree = ETparse(xml_path)
             obj_root = obj_tree.getroot()
             obj_asset = obj_root.find("asset")
-            if obj_asset is not None:
-                for asset_child in obj_asset:
-                    # Use (tag, name) as unique key to avoid duplicates
-                    asset_name = asset_child.get("name", "")
-                    asset_key = (asset_child.tag, asset_name)
-                    if asset_key not in included_assets:
-                        _deep_copy_element(asset_child, asset_el)
-                        included_assets.add(asset_key)
+            if obj_asset is None:
+                continue
 
-                        # If this is a mesh asset, add the mesh file to assets dict
-                        if asset_child.tag == "mesh":
-                            mesh_file = asset_child.get("file")
-                            if mesh_file:
-                                # Resolve mesh path relative to object XML directory
-                                obj_dir = os.path.dirname(xml_path)
-                                mesh_path = os.path.join(obj_dir, mesh_file)
-                                if os.path.exists(mesh_path):
-                                    with open(mesh_path, 'rb') as f:
-                                        mesh_data = f.read()
-                                    assets_dict[mesh_file] = mesh_data
-                                else:
-                                    logger.warning(f"Mesh file not found: {mesh_path}")
+            for asset_child in obj_asset:
+                # Use (tag, name) as unique key to avoid duplicates
+                asset_name = asset_child.get("name", "")
+                asset_key = (asset_child.tag, asset_name)
+                if asset_key in included_assets:
+                    continue
 
-        # Now add worldbody with object instances
-        worldbody_el = SubElement(mujoco_el, "worldbody")
+                _deep_copy_element(asset_child, asset_el)
+                included_assets.add(asset_key)
 
+                # Load mesh binary data if this is a mesh asset
+                if asset_child.tag == "mesh":
+                    self._load_mesh_file(xml_path, asset_child, assets_dict)
+
+    def _load_mesh_file(
+        self,
+        xml_path: str,
+        mesh_element: Element,
+        assets_dict: dict[str, bytes],
+    ) -> None:
+        """
+        Load a mesh file into the assets dictionary.
+
+        Args:
+            xml_path: Path to the object XML (used to resolve relative mesh paths)
+            mesh_element: The <mesh> XML element containing the file attribute
+            assets_dict: Dictionary to populate with mesh file data
+        """
+        mesh_file = mesh_element.get("file")
+        if not mesh_file:
+            return
+
+        obj_dir = os.path.dirname(xml_path)
+        mesh_path = os.path.join(obj_dir, mesh_file)
+
+        if os.path.exists(mesh_path):
+            with open(mesh_path, 'rb') as f:
+                assets_dict[mesh_file] = f.read()
+        else:
+            logger.warning("Mesh file not found: %s", mesh_path)
+
+    def _add_object_instances(
+        self,
+        scene_cfg: Dict[str, Any],
+        worldbody_el: Element,
+    ) -> None:
+        """
+        Add object body instances to the worldbody element.
+
+        Creates numbered instances (e.g., cup_0, cup_1) for each object type,
+        positioning them at hide_pos and prefixing nested element names.
+
+        Args:
+            scene_cfg: Object configuration from scene_config.yaml
+            worldbody_el: The <worldbody> element to add bodies to
+        """
         for obj_type, entry in scene_cfg.items():
             count = entry.get("count", 1)
+
             if self.asset_manager is None or obj_type not in self.asset_manager.list():
                 logger.warning("Unknown asset '%s', skipping", obj_type)
                 continue
 
-            # Get XML path from AssetManager - relies on mujoco.xml_path in meta.yaml
             xml_path = self.asset_manager.get_path(obj_type, "mujoco")
             if xml_path is None:
-                logger.warning("No XML path found for '%s' with simulator 'mujoco', skipping", obj_type)
+                logger.warning("No XML path for '%s' with simulator 'mujoco', skipping", obj_type)
                 continue
 
             if not os.path.exists(xml_path):
                 logger.warning("XML file not found for '%s' at %s, skipping", obj_type, xml_path)
                 continue
 
-            # Parse object XML to extract worldbody contents
             obj_tree = ETparse(xml_path)
             obj_root = obj_tree.getroot()
             obj_worldbody = obj_root.find("worldbody")
@@ -287,18 +342,11 @@ class Environment:
 
             for i in range(count):
                 instance_name = f"{obj_type}_{i}"
-                # Copy all bodies from the object's worldbody
                 for obj_body in obj_worldbody.findall("body"):
-                    # Deep copy the entire body element tree (handles nested structures)
                     new_body = _deep_copy_element(obj_body, worldbody_el)
-                    # Update name and position for this instance
                     new_body.set("name", instance_name)
                     new_body.set("pos", f"{self.hide_pos[0]} {self.hide_pos[1]} {self.hide_pos[2]}")
-                    # Prefix all nested element names to avoid conflicts
                     _prefix_names_in_subtree(new_body, instance_name)
-
-        xml_bytes = tostring(mujoco_el, "utf-8")
-        return minidom.parseString(xml_bytes).toprettyxml(indent="  "), assets_dict
 
     # ------------------------------------------------------------------
     # Metadata Overrides
@@ -522,10 +570,7 @@ class Environment:
         active_objects = self.state_io.load(self.model, self.data, path)
         if self.registry is not None:
             self.registry.active_objects = active_objects
-            # Sync visibility state to match loaded active_objects
-            for name, is_active in self.registry.active_objects.items():
-                body_id = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_BODY, name)
-                self.registry._set_body_visibility(body_id, visible=is_active)
+            self.registry.sync_visibility()
 
     # ------------------------------------------------------------------
     # Forking for Planning
@@ -637,9 +682,7 @@ class Environment:
         # Sync ObjectRegistry state (active objects, visibility) if objects exist
         if self.registry is not None and other.registry is not None:
             self.registry.active_objects = dict(other.registry.active_objects)
-            for name, is_active in self.registry.active_objects.items():
-                body_id = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_BODY, name)
-                self.registry._set_body_visibility(body_id, visible=is_active)
+            self.registry.sync_visibility()
 
     # ------------------------------------------------------------------
     # Context Manager Support
