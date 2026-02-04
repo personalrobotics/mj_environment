@@ -525,14 +525,9 @@ class Environment:
     # ------------------------------------------------------------------
     # Forking for Planning
     # ------------------------------------------------------------------
-    @overload
-    def fork(self, n: None = None) -> 'Environment': ...
-    @overload
-    def fork(self, n: int) -> List['Environment']: ...
-
     def fork(self, n: Optional[int] = None) -> Union['Environment', List['Environment']]:
         """
-        Create fully functional clone(s) with independent state for planning.
+        Create a functional clone with independent state for planning.
 
         Forked environments share immutable data (MjModel, AssetManager) but have
         independent simulation state (MjData, ObjectRegistry). This enables:
@@ -540,11 +535,11 @@ class Environment:
         - Multiple planners running in parallel on separate forks
 
         Args:
-            n: Number of forks to create. If None, returns a single Environment.
-               If an integer, returns a list of Environments.
+            n: DEPRECATED. Use fork_many(n) for multiple forks.
+               If provided, calls fork_many(n) with deprecation warning.
 
         Returns:
-            A single Environment if n is None, or a list of n Environments.
+            A single Environment instance.
 
         Example:
             # Single fork for planning
@@ -553,17 +548,39 @@ class Environment:
             trajectory = planner.plan(planning_env, goal)
             # Original env unchanged
 
-            # Multiple forks for parallel planning
-            forks = env.fork(n=4)
-            with ThreadPoolExecutor() as executor:
-                results = list(executor.map(planner.plan, forks))
-
             # Context manager for explicit scope
             with env.fork() as planning_env:
                 trajectory = planner.plan(planning_env)
         """
-        if n is None:
-            return self._create_fork()
+        if n is not None:
+            warnings.warn(
+                "fork(n=...) is deprecated and will be removed in v2.0. "
+                "Use fork_many(n) for creating multiple forks instead.",
+                DeprecationWarning,
+                stacklevel=2
+            )
+            return self.fork_many(n)
+        return self._create_fork()
+
+    def fork_many(self, n: int) -> List['Environment']:
+        """
+        Create multiple functional clones for parallel planning.
+
+        Each fork shares immutable data (MjModel, AssetManager) but has
+        independent simulation state (MjData, ObjectRegistry).
+
+        Args:
+            n: Number of forks to create
+
+        Returns:
+            List of n independent Environment instances
+
+        Example:
+            # Multiple forks for parallel planning
+            forks = env.fork_many(4)
+            with ThreadPoolExecutor() as executor:
+                results = list(executor.map(planner.plan, forks))
+        """
         return [self._create_fork() for _ in range(n)]
 
     def _create_fork(self) -> 'Environment':

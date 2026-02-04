@@ -119,14 +119,14 @@ class TestForkMultiple:
 
     def test_fork_n_returns_list(self, env):
         """fork(n=N) returns a list of N environments."""
-        forks = env.fork(n=3)
+        forks = env.fork_many(3)
         assert isinstance(forks, list)
         assert len(forks) == 3
         assert all(isinstance(f, Environment) for f in forks)
 
     def test_multiple_forks_are_independent(self, env):
         """Multiple forks are independent from each other."""
-        forks = env.fork(n=3)
+        forks = env.fork_many(3)
 
         # Activate object in first fork only
         obj_type = next(iter(env.registry.objects))
@@ -143,7 +143,7 @@ class TestForkMultiple:
 
     def test_fork_n_zero_returns_empty_list(self, env):
         """fork(n=0) returns an empty list."""
-        forks = env.fork(n=0)
+        forks = env.fork_many(0)
         assert forks == []
 
 
@@ -227,7 +227,7 @@ class TestForkParallelExecution:
         mujoco.mj_forward(env.model, env.data)
 
         # Create forks for parallel "planning"
-        forks = env.fork(n=4)
+        forks = env.fork_many(4)
 
         def simulate_planner(fork, seed):
             """Simulate a planner stepping the simulation."""
@@ -252,7 +252,7 @@ class TestForkParallelExecution:
     def test_parallel_object_updates(self, env):
         """Test parallel object updates in different forks."""
         obj_type = next(iter(env.registry.objects))
-        forks = env.fork(n=4)
+        forks = env.fork_many(4)
 
         def update_fork(fork, idx):
             """Update object position in a fork."""
