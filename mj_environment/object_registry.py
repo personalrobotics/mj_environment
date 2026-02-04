@@ -80,10 +80,11 @@ class ObjectRegistry:
         self.objects: Dict[str, Dict[str, Any]] = {}
         self.active_objects: Dict[str, bool] = {}
         self.geom_visibility: Dict[int, np.ndarray] = {}  # Cache original geom colors
+        self.geom_collision: Dict[int, tuple[int, int]] = {}  # Cache original (contype, conaffinity)
         self._index_cache = MujocoIndexCache(model)  # Cache for body/joint indices
 
         self._preload_objects()
-        self._cache_geom_colors()
+        self._cache_geom_properties()
 
     # ------------------------------------------------------------------
     # Object preloading
@@ -110,21 +111,25 @@ class ObjectRegistry:
 
             logger.debug("Preloaded %d %s(s)", count, obj_type)
 
-    def _cache_geom_colors(self):
-        """Cache the original RGBA colors for all object geoms."""
+    def _cache_geom_properties(self):
+        """Cache original RGBA colors and collision settings for all object geoms."""
         for obj_type in self.objects:
             for instance_name in self.objects[obj_type]["instances"]:
                 body_id = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_BODY, instance_name)
                 geom_adr = self.model.body_geomadr[body_id]
                 geom_num = self.model.body_geomnum[body_id]
 
-                # Store original colors for each geom
+                # Store original colors and collision settings for each geom
                 for i in range(geom_num):
                     geom_id = geom_adr + i
                     if geom_id not in self.geom_visibility:
                         self.geom_visibility[geom_id] = self.model.geom_rgba[geom_id].copy()
+                        self.geom_collision[geom_id] = (
+                            int(self.model.geom_contype[geom_id]),
+                            int(self.model.geom_conaffinity[geom_id]),
+                        )
 
-                # Make all objects invisible initially (they start inactive)
+                # Make all objects invisible and non-collidable initially (they start inactive)
                 self._set_body_visibility(body_id, visible=False)
 
     def copy(self, new_data: mujoco.MjData) -> 'ObjectRegistry':
@@ -157,6 +162,7 @@ class ObjectRegistry:
         }
         clone.active_objects = dict(self.active_objects)
         clone.geom_visibility = {k: v.copy() for k, v in self.geom_visibility.items()}
+        clone.geom_collision = dict(self.geom_collision)  # Tuples are immutable, shallow copy OK
         clone.scene_cfg = self.scene_cfg  # Read-only after init
 
         # Create new index cache (shared model, so indices are the same)
@@ -184,7 +190,7 @@ class ObjectRegistry:
         return None
 
     def _set_body_visibility(self, body_id: int, visible: bool):
-        """Show or hide all geoms of a body by setting RGBA alpha channel."""
+        """Show or hide all geoms of a body by setting RGBA alpha and collision flags."""
         geom_adr = self.model.body_geomadr[body_id]
         geom_num = self.model.body_geomnum[body_id]
 
@@ -192,11 +198,16 @@ class ObjectRegistry:
             geom_id = geom_adr + i
             if geom_id in self.geom_visibility:
                 if visible:
-                    # Restore original alpha
+                    # Restore original alpha and collision settings
                     self.model.geom_rgba[geom_id, RGBA_ALPHA_CHANNEL] = self.geom_visibility[geom_id][RGBA_ALPHA_CHANNEL]
+                    contype, conaffinity = self.geom_collision[geom_id]
+                    self.model.geom_contype[geom_id] = contype
+                    self.model.geom_conaffinity[geom_id] = conaffinity
                 else:
-                    # Set alpha to 0 (invisible)
+                    # Set alpha to 0 (invisible) and disable collisions
                     self.model.geom_rgba[geom_id, RGBA_ALPHA_CHANNEL] = 0.0
+                    self.model.geom_contype[geom_id] = 0
+                    self.model.geom_conaffinity[geom_id] = 0
 
     # ------------------------------------------------------------------
     # Runtime API
