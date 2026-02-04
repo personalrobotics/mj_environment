@@ -38,6 +38,12 @@ class ObjectRegistry:
       - Hidden objects are reusable to respect MuJoCo immutability.
       - For unique identifiers, overprovision in the YAML config.
 
+    State Access:
+      - Use is_active(name) to check if an object is active
+      - Use get_active_instances() to get list of active objects
+      - Direct access to active_objects dict is discouraged for external use
+      - Internal methods may access active_objects directly for performance
+
     Thread Safety:
       - This class is NOT thread-safe for concurrent writes.
       - Multiple threads may safely READ from `objects` dict concurrently.
@@ -329,3 +335,49 @@ class ObjectRegistry:
             for name, active in list(self.active_objects.items()):
                 if active and name not in active_now:
                     self.hide(name)
+
+    def is_active(self, name: str) -> bool:
+        """
+        Check if an object instance is currently active.
+
+        Args:
+            name: Instance name (e.g., "cup_0")
+
+        Returns:
+            True if object is active, False otherwise
+
+        Example:
+            >>> if registry.is_active("cup_0"):
+            ...     print("Cup is visible")
+        """
+        return self.active_objects.get(name, False)
+
+    def get_active_instances(self, obj_type: Optional[str] = None) -> List[str]:
+        """
+        Get list of currently active object instances.
+
+        Args:
+            obj_type: Optional object type to filter by (e.g., "cup")
+                     If None, returns all active instances
+
+        Returns:
+            List of active instance names
+
+        Example:
+            >>> # Get all active objects
+            >>> active = registry.get_active_instances()
+            >>> print(f"Active: {active}")
+            Active: ['cup_0', 'can_1']
+
+            >>> # Get active objects of specific type
+            >>> active_cups = registry.get_active_instances("cup")
+            >>> print(f"Active cups: {active_cups}")
+            Active cups: ['cup_0']
+        """
+        if obj_type is None:
+            return [name for name, is_active in self.active_objects.items() if is_active]
+        else:
+            if obj_type not in self.objects:
+                return []
+            instances = self.objects[obj_type]["instances"]
+            return [name for name in instances if self.active_objects.get(name, False)]
