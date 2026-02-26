@@ -4,13 +4,14 @@ Manages object lifecycle (activation, hiding, movement) in MuJoCo.
 """
 
 import logging
+import math
 import warnings
 
 import mujoco
 import numpy as np
 from typing import Dict, List, Any, Optional, Union, Sequence
 
-from .constants import IDENTITY_QUATERNION, POSITION_DIM, QUATERNION_DIM, DOF_DIM, RGBA_ALPHA_CHANNEL
+from .constants import IDENTITY_QUATERNION, POSITION_DIM, QUATERNION_DIM, DOF_DIM, RGBA_ALPHA_CHANNEL, HIDE_GRID_SPACING
 from .exceptions import (
     ObjectTypeNotFoundError,
     ObjectNotFoundError,
@@ -83,8 +84,12 @@ class ObjectRegistry:
         self.geom_collision: Dict[int, tuple[int, int]] = {}  # Cache original (contype, conaffinity)
         self._index_cache = MujocoIndexCache(model)  # Cache for body/joint indices
 
+        self._hide_positions: Dict[str, np.ndarray] = {}
+
         self._preload_objects()
         self._cache_geom_properties()
+        self._compute_hide_grid()
+        self._apply_hide_grid()
 
     # ------------------------------------------------------------------
     # Object preloading
@@ -132,6 +137,41 @@ class ObjectRegistry:
                 # Make all objects invisible and non-collidable initially (they start inactive)
                 self._set_body_visibility(body_id, visible=False)
 
+    def _compute_hide_grid(self):
+        """Assign each instance a unique parking position on a grid underground.
+
+        Spreading hidden objects apart prevents O(N^2) broadphase collision pairs
+        that occur when all objects share a single hide position in MuJoCo.
+        """
+        all_instances = []
+        for obj_type in self.objects:
+            all_instances.extend(self.objects[obj_type]["instances"])
+
+        n = len(all_instances)
+        if n == 0:
+            return
+
+        cols = math.ceil(math.sqrt(n))
+        rows = math.ceil(n / cols)
+
+        for idx, name in enumerate(all_instances):
+            col = idx % cols
+            row = idx // cols
+            x = self.hide_pos[0] + (col - (cols - 1) / 2) * HIDE_GRID_SPACING
+            y = self.hide_pos[1] + (row - (rows - 1) / 2) * HIDE_GRID_SPACING
+            z = self.hide_pos[2]
+            self._hide_positions[name] = np.array([x, y, z], dtype=float)
+
+    def _apply_hide_grid(self):
+        """Move all inactive instances to their grid positions.
+
+        Called once at init to spread objects that start at the shared hide_pos.
+        """
+        for name, pos in self._hide_positions.items():
+            if not self.active_objects.get(name, False):
+                indices = self._index_cache.get_body_indices(name)
+                self.data.qpos[indices.qpos_adr:indices.qpos_adr + POSITION_DIM] = pos
+
     def copy(self, new_data: mujoco.MjData) -> 'ObjectRegistry':
         """
         Create an independent copy of this registry with new MjData.
@@ -150,6 +190,7 @@ class ObjectRegistry:
         clone.data = new_data  # Independent
         clone.asset_manager = self.asset_manager  # Shared (read-only)
         clone.hide_pos = self.hide_pos.copy()
+        clone._hide_positions = {k: v.copy() for k, v in self._hide_positions.items()}
         clone.verbose = self.verbose
 
         # Deep copy mutable state
@@ -265,7 +306,7 @@ class ObjectRegistry:
         if not self.active_objects[name]:
             return
         indices = self._index_cache.get_body_indices(name)
-        self.data.qpos[indices.qpos_adr:indices.qpos_adr+POSITION_DIM] = self.hide_pos
+        self.data.qpos[indices.qpos_adr:indices.qpos_adr+POSITION_DIM] = self._hide_positions[name]
         self.data.qpos[indices.qpos_adr+POSITION_DIM:indices.qpos_adr+POSITION_DIM+QUATERNION_DIM] = IDENTITY_QUATERNION
         self.data.qvel[indices.qvel_adr:indices.qvel_adr+DOF_DIM] = 0
         self._set_body_visibility(indices.body_id, visible=False)

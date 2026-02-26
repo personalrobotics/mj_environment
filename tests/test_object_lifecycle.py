@@ -1,6 +1,7 @@
 import pytest
 import numpy as np
 import mujoco
+from mj_environment.constants import HIDE_GRID_SPACING, POSITION_DIM
 from mj_environment.environment import Environment
 
 @pytest.fixture
@@ -64,3 +65,52 @@ def test_hidden_objects_have_no_collisions(env):
         geom_id = geom_adr + i
         assert env.model.geom_contype[geom_id] == 0, "Hidden object should have contype=0"
         assert env.model.geom_conaffinity[geom_id] == 0, "Hidden object should have conaffinity=0"
+
+
+def test_hidden_objects_at_unique_positions(env):
+    """Hidden objects should each have a unique parking position on a grid."""
+    registry = env.registry
+
+    # Every instance should have a hide position assigned
+    all_instances = []
+    for obj_type in registry.objects:
+        all_instances.extend(registry.objects[obj_type]["instances"])
+    assert len(registry._hide_positions) == len(all_instances)
+
+    # All hide positions should be unique
+    positions = list(registry._hide_positions.values())
+    for i, p1 in enumerate(positions):
+        for j, p2 in enumerate(positions):
+            if i != j:
+                assert not np.allclose(p1, p2), (
+                    f"Instances {list(registry._hide_positions.keys())[i]} and "
+                    f"{list(registry._hide_positions.keys())[j]} share position {p1}"
+                )
+
+    # Minimum spacing should be >= HIDE_GRID_SPACING
+    if len(positions) > 1:
+        for i in range(len(positions)):
+            for j in range(i + 1, len(positions)):
+                dist = np.linalg.norm(positions[i] - positions[j])
+                assert dist >= HIDE_GRID_SPACING - 1e-9, (
+                    f"Distance {dist:.3f} < {HIDE_GRID_SPACING} between hide positions"
+                )
+
+
+def test_hide_returns_object_to_its_grid_spot(env):
+    """After activate then hide, object should return to its unique grid position."""
+    registry = env.registry
+    obj_type = next(iter(registry.objects))
+    name = f"{obj_type}_0"
+    expected_pos = registry._hide_positions[name]
+
+    # Activate somewhere, then hide
+    registry.activate(obj_type, [1.0, 2.0, 3.0])
+    registry.hide(name)
+
+    # Read back position from qpos
+    indices = registry._index_cache.get_body_indices(name)
+    actual_pos = registry.data.qpos[indices.qpos_adr:indices.qpos_adr + POSITION_DIM]
+    assert np.allclose(actual_pos, expected_pos), (
+        f"Expected hide position {expected_pos}, got {actual_pos}"
+    )
