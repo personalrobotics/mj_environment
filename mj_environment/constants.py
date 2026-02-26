@@ -11,5 +11,8 @@ QUATERNION_DIM = 4
 DOF_DIM = 6
 RGBA_ALPHA_CHANNEL = 3
 
+# Hide grid
+HIDE_GRID_SPACING = 0.5  # meters between hidden object parking spots
+
 # Schema
 STATE_IO_SCHEMA_VERSION = 1
