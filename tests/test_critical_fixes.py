@@ -190,6 +190,30 @@ class TestStateLoadVisibilityRestoration:
             os.unlink(temp_path)
 
 
+class TestMjName2idBehavior:
+    """Regression tests for Issue #26: silent exception swallowing in mj_name2id calls.
+
+    mj_name2id() returns -1 for unknown names — it does not raise TypeError or
+    AttributeError. The original try/except was dead code that never triggered.
+    The fix uses an explicit -1 check instead.
+    """
+
+    def test_mj_name2id_returns_minus_one_for_unknown_body(self, env):
+        """mj_name2id returns -1 for unknown names, not raises.
+
+        This documents the MuJoCo API contract the fix relies on.
+        """
+        body_id = mujoco.mj_name2id(env.model, mujoco.mjtObj.mjOBJ_BODY, "nonexistent_body_99")
+        assert body_id == -1
+
+    def test_known_body_has_valid_id(self, env):
+        """mj_name2id returns a non-negative id for valid body names."""
+        obj_type = next(iter(env.registry.objects))
+        instance = env.registry.objects[obj_type]["instances"][0]
+        body_id = mujoco.mj_name2id(env.model, mujoco.mjtObj.mjOBJ_BODY, instance)
+        assert body_id >= 0
+
+
 class TestDeepXMLCloning:
     """Tests for deep XML element cloning."""
 

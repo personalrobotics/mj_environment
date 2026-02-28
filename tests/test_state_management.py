@@ -9,6 +9,8 @@ Tests cover:
 import pytest
 import numpy as np
 import mujoco
+import tempfile
+import os
 from mj_environment.environment import Environment
 
 
@@ -153,3 +155,49 @@ class TestScaleCaching:
                     size2 = env2.model.geom_size[geom_adr2 + i]
                     assert np.allclose(size1, size2), \
                         f"Geom sizes differ for {instance_name}: {size1} vs {size2}"
+
+
+class TestLoadStateAtomicity:
+    """Regression tests for Issue #28: load_state() partial state corruption.
+
+    If active_objects in the YAML is malformed, physics state (qpos/qvel) must
+    not be modified. The fix moves active_objects parsing before state application.
+    """
+
+    def test_corrupted_active_objects_does_not_modify_physics(self, env, tmp_path):
+        """Malformed active_objects section must not corrupt physics state."""
+        state_file = tmp_path / "corrupted.yaml"
+        nq = env.model.nq
+        nv = env.model.nv
+
+        # Write a state file where active_objects is null (invalid — can't iterate None)
+        state_file.write_text(
+            f"schema_version: 1\n"
+            f"qpos: {[0.5] * nq}\n"
+            f"qvel: {[0.0] * nv}\n"
+            f"active_objects: null\n"
+        )
+
+        original_qpos = env.data.qpos.copy()
+
+        with pytest.raises(Exception):
+            env.load_state(str(state_file))
+
+        # Physics state must be unchanged
+        assert np.allclose(env.data.qpos, original_qpos), (
+            "load_state() corrupted qpos even though active_objects was invalid"
+        )
+
+    def test_valid_state_still_loads_correctly(self, env, tmp_path):
+        """Valid state files continue to load correctly after the fix."""
+        state_file = tmp_path / "valid.yaml"
+
+        obj_type = next(iter(env.registry.objects))
+        name = env.registry.activate(obj_type, [0.1, 0.2, 0.3])
+        mujoco.mj_forward(env.model, env.data)
+
+        env.save_state(str(state_file))
+        env.registry.hide(name)
+
+        env.load_state(str(state_file))
+        assert env.registry.active_objects[name] is True

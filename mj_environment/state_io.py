@@ -90,12 +90,18 @@ class StateIO:
                 hint="The state file was saved from a different model configuration.",
             )
 
+        # Parse active_objects BEFORE modifying any state.
+        # If the active_objects section is malformed, we want to fail before
+        # touching qpos/qvel to avoid leaving the environment in a corrupt state.
+        active_list = state.get("active_objects", [])
+        if isinstance(active_list, dict):
+            active_objects = active_list
+        else:
+            active_objects = {name: True for name in active_list}
+
+        # All validation passed — now apply state.
         data.qpos[:] = qpos
         data.qvel[:] = qvel
         mujoco.mj_forward(model, data)
-        
-        # Return as dict
-        active_list = state.get("active_objects", [])
-        if isinstance(active_list, dict):
-            return active_list
-        return {name: True for name in active_list}
+
+        return active_objects
