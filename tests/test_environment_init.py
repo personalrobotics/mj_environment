@@ -54,14 +54,14 @@ def test_status_object_types_info(env):
         assert info["total"] == info["active"] + info["available"]
 
 
-def test_status_verbose_includes_all_objects(env):
-    """Test that status(verbose=True) includes inactive objects."""
-    # With verbose=False, only active objects are returned
-    status = env.status(verbose=False)
+def test_status_include_inactive(env):
+    """Test that status(include_inactive=True) includes hidden objects."""
+    # By default, only active objects are returned
+    status = env.status()
     assert len(status["active_objects"]) == 0
 
-    # With verbose=True, all objects (including inactive) are returned
-    status = env.status(verbose=True)
+    # With include_inactive=True, all objects (including hidden) are returned
+    status = env.status(include_inactive=True)
     total_objects = sum(info["total"] for info in status["object_types"].values())
     assert len(status["active_objects"]) == total_objects
 

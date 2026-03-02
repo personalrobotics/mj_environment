@@ -475,25 +475,32 @@ class Environment:
         """Reset simulation and all objects."""
         mujoco.mj_resetData(self.model, self.data)
 
-    def status(self, verbose: bool = False) -> Dict[str, Any]:
+    def status(self, include_inactive: bool = False) -> Dict[str, Any]:
         """
         Get current scene status for inspection and debugging.
 
+        By default only active (visible) objects are included.  Pass
+        ``include_inactive=True`` to also list hidden objects — useful
+        for debugging pool usage or verifying hide/show behaviour.
+
         Args:
-            verbose: If True, include positions for all objects (not just active).
+            include_inactive: If True, include hidden objects in active_objects
+                dict (each entry has ``"active": False``).
 
         Returns:
             Dict with keys:
                 - time: Current simulation time
                 - active_count: Number of active objects
-                - active_objects: Dict mapping name -> {pos, quat} for active objects
+                - active_objects: Dict mapping name -> {pos, quat, active}
                 - object_types: Dict mapping type -> {total, active, available}
 
         Example:
             >>> status = env.status()
             >>> print(f"Active: {status['active_count']} objects")
-            >>> for name, state in status['active_objects'].items():
-            ...     print(f"  {name}: pos={state['pos']}")
+            >>> for name, info in status['active_objects'].items():
+            ...     print(f"  {name}: pos={info['pos']}")
+            >>> # See all objects including hidden ones:
+            >>> full = env.status(include_inactive=True)
         """
         # Robot-only environment (no objects)
         if self.registry is None:
@@ -506,7 +513,7 @@ class Environment:
 
         active_objects = {}
         for name, is_active in self.registry.active_objects.items():
-            if is_active or verbose:
+            if is_active or include_inactive:
                 indices = self.registry._index_cache.get_body_indices(name)
                 pos = self.data.qpos[indices.qpos_adr:indices.qpos_adr+POSITION_DIM].tolist()
                 quat = self.data.qpos[indices.qpos_adr+POSITION_DIM:indices.qpos_adr+POSITION_DIM+QUATERNION_DIM].tolist()
