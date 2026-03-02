@@ -1,6 +1,5 @@
 from .environment import Environment
 from .object_registry import ObjectRegistry
-from .state_io import StateIO
 from .tracker import BaseTracker, ObjectTracker
 from .exceptions import (
     MjEnvironmentError,
@@ -43,5 +42,4 @@ __all__ = [
     'ObjectTracker',            # Nearest-neighbor detection-to-instance tracker
     # Advanced components
     'ObjectRegistry',
-    'StateIO',
 ] 

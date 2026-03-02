@@ -65,10 +65,10 @@ from asset_manager import AssetManager
 
 # Local
 from .constants import POSITION_DIM, QUATERNION_DIM
-from .exceptions import ConfigurationError, ObjectNotFoundError
+from .constants import STATE_IO_SCHEMA_VERSION
+from .exceptions import ConfigurationError, ObjectNotFoundError, StateError
 from .mujoco_helpers import MujocoIndexCache
 from .object_registry import ObjectRegistry
-from .state_io import StateIO
 from .types import Detection, ObjectMetadata
 
 
@@ -146,11 +146,6 @@ class Environment:
             )
         else:
             self.registry = None
-
-        # ------------------------------------------------------------------
-        # 7️⃣ Add state I/O helper for serialization
-        # ------------------------------------------------------------------
-        self.state_io = StateIO()
 
         object_count = len(self.registry.objects) if self.registry else 0
         logger.info("Loaded scene with %d object types", object_count)
@@ -562,12 +557,64 @@ class Environment:
     # ------------------------------------------------------------------
     def save_state(self, path: str) -> None:
         """Serialize current simulation state to YAML."""
+        if not np.all(np.isfinite(self.data.qpos)):
+            raise StateError(
+                "Cannot save: qpos contains NaN or Inf values",
+                hint="Check for physics explosions or invalid object poses.",
+            )
+        if not np.all(np.isfinite(self.data.qvel)):
+            raise StateError(
+                "Cannot save: qvel contains NaN or Inf values",
+                hint="Check for physics explosions or invalid object velocities.",
+            )
+
         active_objects = self.registry.active_objects if self.registry else {}
-        self.state_io.save(self.model, self.data, active_objects, path)
+        if isinstance(active_objects, dict):
+            active_dict = active_objects
+        else:
+            active_dict = {name: True for name in active_objects}
+
+        state = {
+            "schema_version": STATE_IO_SCHEMA_VERSION,
+            "qpos": self.data.qpos.tolist(),
+            "qvel": self.data.qvel.tolist(),
+            "active_objects": active_dict,
+        }
+        with open(path, "w") as f:
+            yaml.safe_dump(state, f)
 
     def load_state(self, path: str) -> None:
         """Load simulation state from YAML."""
-        active_objects = self.state_io.load(self.model, self.data, path)
+        with open(path, "r") as f:
+            state = yaml.safe_load(f)
+
+        if state.get("schema_version") != STATE_IO_SCHEMA_VERSION:
+            raise StateError(
+                f"Incompatible schema version: found {state.get('schema_version')}, expected {STATE_IO_SCHEMA_VERSION}",
+                hint="This state file was saved with a different version of mj_environment.",
+            )
+
+        qpos = np.array(state["qpos"])
+        qvel = np.array(state["qvel"])
+
+        if len(qpos) != self.model.nq or len(qvel) != self.model.nv:
+            raise StateError(
+                f"State dimensions mismatch: qpos={len(qpos)} (expected {self.model.nq}), qvel={len(qvel)} (expected {self.model.nv})",
+                hint="The state file was saved from a different model configuration.",
+            )
+
+        # Parse active_objects BEFORE modifying state to avoid corruption on error
+        active_list = state.get("active_objects", [])
+        if isinstance(active_list, dict):
+            active_objects = active_list
+        else:
+            active_objects = {name: True for name in active_list}
+
+        # All validation passed — apply state
+        self.data.qpos[:] = qpos
+        self.data.qvel[:] = qvel
+        mujoco.mj_forward(self.model, self.data)
+
         if self.registry is not None:
             self.registry.active_objects = active_objects
             self.registry.sync_visibility()
@@ -649,7 +696,6 @@ class Environment:
         # Independent state
         fork.data = self._clone_data()
         fork.registry = self.registry.copy(fork.data) if self.registry else None
-        fork.state_io = StateIO()
 
         return fork
 
