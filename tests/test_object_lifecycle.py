@@ -10,7 +10,6 @@ def env():
         base_scene_xml="data/scene.xml",
         objects_dir="data/objects",
         scene_config_yaml="data/scene_config.yaml",
-        verbose=False,
     )
 
 def test_activate_and_hide(env):

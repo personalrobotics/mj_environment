@@ -5,11 +5,14 @@ Showcases runtime object activation, motion, forking, and state serialization
 using the mj_environment Environment.
 """
 
+import logging
 import mujoco
 import mujoco.viewer
 import numpy as np
 import time
 from mj_environment.environment import Environment
+
+logging.basicConfig(level=logging.DEBUG, format="[%(name)s] %(message)s")
 
 
 def dynamic_kitchen_demo():
@@ -18,7 +21,6 @@ def dynamic_kitchen_demo():
         base_scene_xml="data/scene.xml",
         objects_dir="data/objects",
         scene_config_yaml="data/scene_config.yaml",
-        verbose=True,
     )
 
     model = env.model

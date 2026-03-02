@@ -20,7 +20,6 @@ def env():
         base_scene_xml="data/scene.xml",
         objects_dir="data/objects",
         scene_config_yaml="data/scene_config.yaml",
-        verbose=False,
     )
 
 
@@ -106,7 +105,6 @@ class TestPathHandling:
             base_scene_xml="data/scene.xml",
             objects_dir="data/objects",
             scene_config_yaml="data/scene_config.yaml",
-            verbose=False,
         )
         assert env.model is not None
 
@@ -117,7 +115,6 @@ class TestPathHandling:
             base_scene_xml=os.path.join(base_dir, "data/scene.xml"),
             objects_dir=os.path.join(base_dir, "data/objects"),
             scene_config_yaml=os.path.join(base_dir, "data/scene_config.yaml"),
-            verbose=False,
         )
         assert env.model is not None
 

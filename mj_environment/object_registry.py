@@ -58,7 +58,6 @@ class ObjectRegistry:
         asset_manager,
         scene_cfg: Dict[str, Any],
         hide_pos=[0, 0, -1],
-        verbose=False,
     ):
         """
         Initialize ObjectRegistry.
@@ -69,14 +68,12 @@ class ObjectRegistry:
             asset_manager: AssetManager instance
             scene_cfg: Objects dict from scene_config.yaml (already loaded by Environment)
             hide_pos: Position for hidden objects
-            verbose: Enable debug logging
         """
         self.model = model
         self.data = data
         self.asset_manager = asset_manager
         self.scene_cfg = scene_cfg
         self.hide_pos = np.array(hide_pos, dtype=float)
-        self.verbose = verbose
         self.objects: Dict[str, Dict[str, Any]] = {}
         self.active_objects: Dict[str, bool] = {}
         self.geom_visibility: Dict[int, np.ndarray] = {}  # Cache original geom colors
@@ -190,7 +187,6 @@ class ObjectRegistry:
         clone.asset_manager = self.asset_manager  # Shared (read-only)
         clone.hide_pos = self.hide_pos.copy()
         clone._hide_positions = {k: v.copy() for k, v in self._hide_positions.items()}
-        clone.verbose = self.verbose
 
         # Deep copy mutable state
         clone.objects = {

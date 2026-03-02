@@ -246,7 +246,7 @@ Available exceptions:
 | `sync_from(other)` | Copy state from another environment |
 | `step(ctrl=None)` | Advance physics simulation |
 | `reset()` | Reset simulation state |
-| `status(verbose=False)` | Get scene status (active objects, positions) |
+| `status(include_inactive=False)` | Get scene status (active objects, positions) |
 | `save_state(path)` | Serialize state to YAML |
 | `load_state(path)` | Restore state from YAML |
 | `get_object_metadata(name)` | Get object properties |
@@ -282,8 +282,6 @@ logging.basicConfig(level=logging.DEBUG)
 # Or for mj_environment only:
 logging.getLogger("mj_environment").setLevel(logging.DEBUG)
 ```
-
-The `verbose=True` parameter still works for backward compatibility and enables DEBUG-level logging automatically.
 
 ## License
 

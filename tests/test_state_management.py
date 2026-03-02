@@ -20,7 +20,6 @@ def env():
         base_scene_xml="data/scene.xml",
         objects_dir="data/objects",
         scene_config_yaml="data/scene_config.yaml",
-        verbose=False,
     )
 
 
@@ -127,13 +126,11 @@ class TestScaleCaching:
             base_scene_xml="data/scene.xml",
             objects_dir="data/objects",
             scene_config_yaml="data/scene_config.yaml",
-            verbose=False,
         )
         env2 = Environment(
             base_scene_xml="data/scene.xml",
             objects_dir="data/objects",
             scene_config_yaml="data/scene_config.yaml",
-            verbose=False,
         )
 
         # Both environments should have the same geom sizes

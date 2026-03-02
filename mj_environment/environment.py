@@ -88,17 +88,8 @@ class Environment:
         objects_dir: Optional[str] = None,
         scene_config_yaml: Optional[str] = None,
         hide_pos: List[float] = [0, 0, -1],
-        verbose: bool = False,
     ):
-        self.verbose = verbose
         self.hide_pos = hide_pos
-
-        # Configure logging based on verbose flag (for backward compatibility)
-        if verbose and not logger.handlers:
-            handler = logging.StreamHandler()
-            handler.setFormatter(logging.Formatter("[%(name)s] %(message)s"))
-            logger.addHandler(handler)
-            logger.setLevel(logging.DEBUG)
 
         # ------------------------------------------------------------------
         # 1️⃣ Load scene config and determine if we have objects to manage
@@ -110,7 +101,7 @@ class Environment:
         # 2️⃣ Asset Manager: load YAML metadata + object XMLs (if objects exist)
         # ------------------------------------------------------------------
         if self._has_objects:
-            self.asset_manager: Optional[AssetManager] = AssetManager(base_dir=objects_dir, verbose=verbose)
+            self.asset_manager: Optional[AssetManager] = AssetManager(base_dir=objects_dir)
         else:
             self.asset_manager = None
 
@@ -141,7 +132,7 @@ class Environment:
         # ------------------------------------------------------------------
         if self._has_objects:
             self.registry: Optional[ObjectRegistry] = ObjectRegistry(
-                self.model, self.data, self.asset_manager, self._scene_cfg, hide_pos, verbose
+                self.model, self.data, self.asset_manager, self._scene_cfg, hide_pos
             )
         else:
             self.registry = None
@@ -161,9 +152,14 @@ class Environment:
         if objects_dir is None and scene_config_yaml is None:
             return {}
 
-        # If one is provided but not the other, treat as robot-only
+        # Both must be provided together
         if objects_dir is None or scene_config_yaml is None:
-            return {}
+            provided = "objects_dir" if objects_dir else "scene_config_yaml"
+            missing = "scene_config_yaml" if objects_dir else "objects_dir"
+            raise ConfigurationError(
+                f"{provided} was provided without {missing}",
+                hint=f"Provide both objects_dir and scene_config_yaml, or neither (robot-only).",
+            )
 
         # Config file provided - must exist
         if not os.path.exists(scene_config_yaml):
@@ -479,25 +475,32 @@ class Environment:
         """Reset simulation and all objects."""
         mujoco.mj_resetData(self.model, self.data)
 
-    def status(self, verbose: bool = False) -> Dict[str, Any]:
+    def status(self, include_inactive: bool = False) -> Dict[str, Any]:
         """
         Get current scene status for inspection and debugging.
 
+        By default only active (visible) objects are included.  Pass
+        ``include_inactive=True`` to also list hidden objects — useful
+        for debugging pool usage or verifying hide/show behaviour.
+
         Args:
-            verbose: If True, include positions for all objects (not just active).
+            include_inactive: If True, include hidden objects in active_objects
+                dict (each entry has ``"active": False``).
 
         Returns:
             Dict with keys:
                 - time: Current simulation time
                 - active_count: Number of active objects
-                - active_objects: Dict mapping name -> {pos, quat} for active objects
+                - active_objects: Dict mapping name -> {pos, quat, active}
                 - object_types: Dict mapping type -> {total, active, available}
 
         Example:
             >>> status = env.status()
             >>> print(f"Active: {status['active_count']} objects")
-            >>> for name, state in status['active_objects'].items():
-            ...     print(f"  {name}: pos={state['pos']}")
+            >>> for name, info in status['active_objects'].items():
+            ...     print(f"  {name}: pos={info['pos']}")
+            >>> # See all objects including hidden ones:
+            >>> full = env.status(include_inactive=True)
         """
         # Robot-only environment (no objects)
         if self.registry is None:
@@ -510,7 +513,7 @@ class Environment:
 
         active_objects = {}
         for name, is_active in self.registry.active_objects.items():
-            if is_active or verbose:
+            if is_active or include_inactive:
                 indices = self.registry._index_cache.get_body_indices(name)
                 pos = self.data.qpos[indices.qpos_adr:indices.qpos_adr+POSITION_DIM].tolist()
                 quat = self.data.qpos[indices.qpos_adr+POSITION_DIM:indices.qpos_adr+POSITION_DIM+QUATERNION_DIM].tolist()
@@ -565,13 +568,30 @@ class Environment:
             "qvel": self.data.qvel.tolist(),
             "active_objects": active_dict,
         }
-        with open(path, "w") as f:
-            yaml.safe_dump(state, f)
+        try:
+            with open(path, "w") as f:
+                yaml.safe_dump(state, f)
+        except OSError as e:
+            raise StateError(
+                f"Failed to save state to {path}: {e}",
+                hint="Check that the directory exists and is writable.",
+            ) from e
 
     def load_state(self, path: str) -> None:
         """Load simulation state from YAML."""
-        with open(path, "r") as f:
-            state = yaml.safe_load(f)
+        try:
+            with open(path, "r") as f:
+                state = yaml.safe_load(f)
+        except OSError as e:
+            raise StateError(
+                f"Failed to load state from {path}: {e}",
+                hint="Check that the file exists and is readable.",
+            ) from e
+        except yaml.YAMLError as e:
+            raise StateError(
+                f"Failed to parse state file {path}: {e}",
+                hint="Check that the file contains valid YAML.",
+            ) from e
 
         if state.get("schema_version") != STATE_IO_SCHEMA_VERSION:
             raise StateError(
@@ -662,7 +682,6 @@ class Environment:
         fork.assets = self.assets  # Assets dict is shared (read-only)
         fork.asset_manager = self.asset_manager
         fork.hide_pos = self.hide_pos
-        fork.verbose = self.verbose
         fork._geom_original_size = self._geom_original_size  # Read-only cache
         fork._has_objects = self._has_objects
 
