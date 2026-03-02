@@ -444,7 +444,6 @@ class Environment:
         self,
         object_list: Union[List[Detection], List[Dict[str, Any]]],
         hide_unlisted: Optional[bool] = None,
-        persist: Optional[bool] = None,
     ) -> None:
         """
         Batch update multiple objects in the environment.
@@ -456,7 +455,6 @@ class Environment:
                 - quat: (optional) Quaternion [w, x, y, z], defaults to [1, 0, 0, 0]
             hide_unlisted: If True (default), hide objects not in the list.
                           If False, keep previously active objects visible.
-            persist: DEPRECATED. Use hide_unlisted instead.
 
         Raises:
             RuntimeError: If environment has no object management configured.
@@ -467,18 +465,6 @@ class Environment:
             >>> # Keep previously active objects
             >>> env.update([...], hide_unlisted=False)
         """
-        # Handle parameter deprecation
-        if persist is not None:
-            warnings.warn(
-                "The 'persist' parameter is deprecated and will be removed in v2.0. "
-                "Use 'hide_unlisted' instead: persist=False -> hide_unlisted=True, "
-                "persist=True -> hide_unlisted=False",
-                DeprecationWarning,
-                stacklevel=2
-            )
-            if hide_unlisted is None:
-                hide_unlisted = not persist
-
         if self.registry is None:
             raise RuntimeError("Cannot update objects: environment has no object management configured")
         self.registry.update(object_list, hide_unlisted=hide_unlisted)  # type: ignore[arg-type]
