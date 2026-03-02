@@ -15,7 +15,6 @@ import tempfile
 import os
 from mj_environment.environment import Environment
 from mj_environment.object_registry import ObjectRegistry
-from mj_environment.simulation import Simulation
 
 
 @pytest.fixture
@@ -100,7 +99,7 @@ class TestCopyDataModelFix:
         """Test that copy_data works without AttributeError."""
         clone = mujoco.MjData(env.model)
         # This should not raise AttributeError about .model
-        Simulation.copy_data(env.model, clone, env.data)
+        Environment._copy_data(env.model, clone, env.data)
 
     def test_fork_uses_copy_data_internally(self, env):
         """Test that fork() properly uses copy_data to clone state."""

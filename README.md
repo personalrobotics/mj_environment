@@ -77,7 +77,7 @@ planning_env = env.fork()
 planning_env.update([{"name": "cup_0", "pos": [0.5, 0.5, 0.4], "quat": [1, 0, 0, 0]}])
 
 for _ in range(100):
-    planning_env.sim.step()
+    planning_env.step()
 
 # Original is untouched
 assert env.data.time == 0.0
@@ -95,7 +95,7 @@ def run_planner(fork, planner, cancel):
     for step in planner.steps():
         if cancel.is_set():
             return None  # Cancelled
-        fork.sim.step()
+        fork.step()
     return planner.get_plan()
 
 forks = env.fork_many(4)
@@ -150,7 +150,7 @@ graph TD
     C[data/objects/*] -->|Metadata + XML| D[AssetManager]
     D --> E
     E -->|Object lifecycle| F[ObjectRegistry]
-    E -->|Physics| G[Simulation]
+    E -->|Physics| G[MuJoCo]
     F -->|Show/Hide via RGBA| G
     G --> H[MuJoCo Viewer]
 ```

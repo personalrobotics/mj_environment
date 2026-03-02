@@ -68,7 +68,6 @@ from .constants import POSITION_DIM, QUATERNION_DIM
 from .exceptions import ConfigurationError, ObjectNotFoundError
 from .mujoco_helpers import MujocoIndexCache
 from .object_registry import ObjectRegistry
-from .simulation import Simulation
 from .state_io import StateIO
 from .types import Detection, ObjectMetadata
 
@@ -80,7 +79,7 @@ class Environment:
     Responsibilities:
       - Load all object metadata via AssetManager
       - Dynamically compose a MuJoCo scene XML in memory
-      - Initialize Simulation and ObjectRegistry
+      - Initialize ObjectRegistry
       - Provide forking, updating, and serialization
     """
 
@@ -139,9 +138,8 @@ class Environment:
             self._apply_metadata_overrides()
 
         # ------------------------------------------------------------------
-        # 6️⃣ Initialize Simulation + Object Registry
+        # 6️⃣ Initialize Object Registry
         # ------------------------------------------------------------------
-        self.sim = Simulation(self.model, self.data)
         if self._has_objects:
             self.registry: Optional[ObjectRegistry] = ObjectRegistry(
                 self.model, self.data, self.asset_manager, self._scene_cfg, hide_pos, verbose
@@ -153,9 +151,6 @@ class Environment:
         # 7️⃣ Add state I/O helper for serialization
         # ------------------------------------------------------------------
         self.state_io = StateIO()
-
-        # Track whether this is a fork (for potential future use)
-        self._is_fork = False
 
         object_count = len(self.registry.objects) if self.registry else 0
         logger.info("Loaded scene with %d object types", object_count)
@@ -496,11 +491,13 @@ class Environment:
 
     def step(self, ctrl: Optional[np.ndarray] = None) -> None:
         """Advance simulation by one step."""
-        self.sim.step(ctrl)
+        if ctrl is not None:
+            np.copyto(self.data.ctrl, ctrl)
+        mujoco.mj_step(self.model, self.data)
 
     def reset(self) -> None:
         """Reset simulation and all objects."""
-        self.sim.reset()
+        mujoco.mj_resetData(self.model, self.data)
 
     def status(self, verbose: bool = False) -> Dict[str, Any]:
         """
@@ -650,13 +647,9 @@ class Environment:
         fork._has_objects = self._has_objects
 
         # Independent state
-        fork.data = self.sim.clone_data()
-        fork.sim = Simulation(fork.model, fork.data)
+        fork.data = self._clone_data()
         fork.registry = self.registry.copy(fork.data) if self.registry else None
         fork.state_io = StateIO()
-
-        # Mark as fork (for potential future use)
-        fork._is_fork = True
 
         return fork
 
@@ -680,12 +673,32 @@ class Environment:
             env.sync_from(perception_fork)
         """
         # Sync MjData (physics state)
-        Simulation.copy_data(self.model, self.data, other.data)
+        self._copy_data(self.model, self.data, other.data)
 
         # Sync ObjectRegistry state (active objects, visibility) if objects exist
         if self.registry is not None and other.registry is not None:
             self.registry.active_objects = dict(other.registry.active_objects)
             self.registry.sync_visibility()
+
+    # ------------------------------------------------------------------
+    # MjData Cloning
+    # ------------------------------------------------------------------
+    def _clone_data(self) -> mujoco.MjData:
+        """Create a deep clone of the current simulation state."""
+        clone = mujoco.MjData(self.model)
+        self._copy_data(self.model, clone, self.data)
+        return clone
+
+    @staticmethod
+    def _copy_data(model: mujoco.MjModel, dst: mujoco.MjData, src: mujoco.MjData) -> None:
+        """Copy all MuJoCo state arrays between two MjData objects."""
+        np.copyto(dst.qpos, src.qpos)
+        np.copyto(dst.qvel, src.qvel)
+        np.copyto(dst.act, src.act)
+        np.copyto(dst.ctrl, src.ctrl)
+        np.copyto(dst.qacc, src.qacc)
+        np.copyto(dst.qfrc_applied, src.qfrc_applied)
+        mujoco.mj_forward(model, dst)
 
     # ------------------------------------------------------------------
     # Context Manager Support

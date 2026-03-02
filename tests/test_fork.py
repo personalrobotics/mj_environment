@@ -39,13 +39,11 @@ class TestForkBasics:
         """Forked environment has its own MjData instance."""
         fork = env.fork()
         assert fork.data is not env.data
-        assert fork.sim.data is not env.sim.data
 
     def test_fork_shares_model(self, env):
         """Forked environment shares the immutable MjModel."""
         fork = env.fork()
         assert fork.model is env.model
-        assert fork.sim.model is env.sim.model
 
     def test_fork_has_independent_registry(self, env):
         """Forked environment has its own ObjectRegistry."""
@@ -177,7 +175,7 @@ class TestForkFunctionality:
         initial_time = fork.data.time
 
         for _ in range(10):
-            fork.sim.step()
+            fork.step()
 
         assert fork.data.time > initial_time
         # Original should not have stepped
@@ -201,7 +199,7 @@ class TestForkFunctionality:
 
         # Step simulation
         for _ in range(10):
-            fork.sim.step()
+            fork.step()
 
         fork.reset()
         assert fork.data.time == 0.0
@@ -233,7 +231,7 @@ class TestForkParallelExecution:
             """Simulate a planner stepping the simulation."""
             rng = np.random.default_rng(seed)
             for _ in range(50):
-                fork.sim.step()
+                fork.step()
             return fork.data.time
 
         # Run planners in parallel
