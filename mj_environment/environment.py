@@ -3,7 +3,7 @@
 # Standard library
 import logging
 import os
-from typing import List, Dict, Any, Optional, Union
+from typing import List, Dict, Any, Optional
 from xml.dom import minidom
 from xml.etree.ElementTree import Element, SubElement, tostring, parse as ETparse
 
@@ -66,7 +66,6 @@ from asset_manager import AssetManager
 from .object_registry import DEFAULT_HIDE_POSITION
 from .exceptions import ConfigurationError, ObjectNotFoundError, StateError
 from .object_registry import ObjectRegistry
-from .types import Detection, ObjectMetadata
 
 
 class Environment:
@@ -399,7 +398,7 @@ class Environment:
     # ======================================================================
     # Public API
     # ======================================================================
-    def get_object_metadata(self, instance_name: str) -> ObjectMetadata:
+    def get_object_metadata(self, instance_name: str) -> Dict[str, Any]:
         """
         Get asset metadata for an object instance.
 
@@ -435,7 +434,7 @@ class Environment:
     
     def update(
         self,
-        object_list: Union[List[Detection], List[Dict[str, Any]]],
+        object_list: List[Dict[str, Any]],
         hide_unlisted: Optional[bool] = None,
     ) -> None:
         """

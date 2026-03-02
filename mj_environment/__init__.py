@@ -9,16 +9,6 @@ from .exceptions import (
     ConfigurationError,
     StateError,
 )
-from .types import (
-    Detection,
-    DetectionList,
-    ObjectMetadata,
-    SceneConfig,
-    SavedState,
-    Position,
-    Quaternion,
-)
-
 __all__ = [
     # Primary API
     'Environment',
@@ -29,14 +19,6 @@ __all__ = [
     'ObjectPoolExhaustedError', # All instances of a type are active
     'ConfigurationError',       # Config file issues
     'StateError',               # State loading/saving issues
-    # Type definitions
-    'Detection',                # TypedDict for object detections
-    'DetectionList',            # List[Detection] alias
-    'ObjectMetadata',           # TypedDict for meta.yaml structure
-    'SceneConfig',              # TypedDict for scene_config.yaml
-    'SavedState',               # TypedDict for saved state files
-    'Position',                 # Union[List[float], ndarray]
-    'Quaternion',               # Union[List[float], ndarray]
     # Tracking
     'BaseTracker',              # ABC for custom tracker implementations
     'ObjectTracker',            # Nearest-neighbor detection-to-instance tracker
