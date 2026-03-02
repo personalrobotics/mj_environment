@@ -124,6 +124,7 @@ def perception_update_demo():
         viewer.cam.azimuth = -45
         viewer.cam.elevation = -45
         viewer.cam.distance = 2.0
+        viewer.opt.label = mujoco.mjtLabel.mjLABEL_BODY
 
         while viewer.is_running():
             # 1. Simulate raw detections from each perception module
