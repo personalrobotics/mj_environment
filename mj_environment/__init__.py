@@ -2,6 +2,7 @@ from .environment import Environment
 from .object_registry import ObjectRegistry
 from .simulation import Simulation
 from .state_io import StateIO
+from .tracker import BaseTracker, ObjectTracker
 from .exceptions import (
     MjEnvironmentError,
     ObjectTypeNotFoundError,
@@ -38,6 +39,9 @@ __all__ = [
     'SavedState',               # TypedDict for saved state files
     'Position',                 # Union[List[float], ndarray]
     'Quaternion',               # Union[List[float], ndarray]
+    # Tracking
+    'BaseTracker',              # ABC for custom tracker implementations
+    'ObjectTracker',            # Nearest-neighbor detection-to-instance tracker
     # Advanced components
     'ObjectRegistry',
     'Simulation',

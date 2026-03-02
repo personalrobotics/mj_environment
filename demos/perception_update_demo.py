@@ -1,15 +1,17 @@
 """
 Perception Update Demo
 ======================
-Demonstrates alias-based object detection with fork/sync for safe updates.
+Demonstrates alias-based object detection with ObjectTracker for persistent
+instance association, and fork/sync for safe environment updates.
 
 Each "perception module" (YCB, COCO, custom detector) detects objects via
 human-readable aliases like "red cup" or "mug". AssetManager resolves each
-alias to a canonical object type, and a fork/sync cycle applies the merged
-detections atomically to the main environment.
+alias to a canonical object type, and ObjectTracker maintains consistent
+instance identity across frames.
 
 Key features:
 - Alias-based detection: alias → AssetManager.resolve_alias() → object type
+- ObjectTracker: nearest-neighbor association for persistent instance names
 - Fork/sync pattern: process detections in a fork, then sync_from() to commit
 """
 
@@ -18,7 +20,7 @@ import mujoco.viewer
 import numpy as np
 import time
 from typing import Dict, List, Any
-from mj_environment import Environment
+from mj_environment import Environment, ObjectTracker
 
 
 def collect_perception_aliases(env: Environment) -> Dict[str, List[str]]:
@@ -48,15 +50,14 @@ def simulate_detections(
     module_name: str,
     aliases: List[str],
     asset_manager,
-    registry,
     z_center: float,
     rng: np.random.Generator,
 ) -> List[Dict[str, Any]]:
     """
-    Simulate one round of detections from a perception module.
+    Simulate one round of raw detections from a perception module.
 
-    Picks 1-2 aliases at random, resolves each to an object instance,
-    and returns update dicts with randomized positions on the table.
+    Returns dicts with "type" and "pos" — no instance names.
+    The ObjectTracker handles instance assignment.
     """
     n = rng.integers(1, min(3, len(aliases) + 1))
     selected = rng.choice(aliases, size=n, replace=False)
@@ -64,30 +65,24 @@ def simulate_detections(
     detections = []
     for alias in selected:
         obj_type = asset_manager.resolve_alias(alias, module=module_name)
-        if obj_type is None or obj_type not in registry.objects:
+        if obj_type is None:
             continue
 
-        instances = registry.objects[obj_type]["instances"]
-        if not instances:
-            continue
-
-        instance = rng.choice(instances)
         pos = [rng.uniform(-0.4, 0.4), rng.uniform(-0.4, 0.4), z_center]
-        detections.append({"name": instance, "pos": pos, "quat": [1, 0, 0, 0]})
-
-        print(f"  [{module_name}] '{alias}' -> {instance} at ({pos[0]:+.2f}, {pos[1]:+.2f})")
+        detections.append({"type": obj_type, "pos": pos})
+        print(f"  [{module_name}] '{alias}' -> type={obj_type} at ({pos[0]:+.2f}, {pos[1]:+.2f})")
 
     return detections
 
 
 def perception_update_demo():
     """
-    Demonstrate alias-based perception with fork/sync updates.
+    Demonstrate alias-based perception with ObjectTracker and fork/sync.
 
     Each viewer tick:
-    1. Each perception module "detects" objects via aliases
-    2. Detections are merged (last-write-wins per instance)
-    3. A fork applies the merged update, then sync_from() commits it
+    1. Each perception module "detects" objects via aliases → raw {type, pos}
+    2. ObjectTracker associates detections to persistent instance names
+    3. A fork applies the tracked updates, then sync_from() commits them
     """
     env = Environment(
         base_scene_xml="data/scene.xml",
@@ -111,8 +106,11 @@ def perception_update_demo():
     # Discover which aliases each perception module can detect
     aliases_by_module = collect_perception_aliases(env)
 
+    # ObjectTracker maintains persistent detection → instance mapping
+    tracker = ObjectTracker(env.registry, max_distance=0.20)
+
     print("=" * 60)
-    print("Perception Update Demo (alias resolution + fork/sync)")
+    print("Perception Update Demo (tracker + alias resolution + fork/sync)")
     print("=" * 60)
     for module_name, aliases in aliases_by_module.items():
         print(f"  {module_name}: {', '.join(aliases)}")
@@ -128,20 +126,25 @@ def perception_update_demo():
         viewer.cam.distance = 2.0
 
         while viewer.is_running():
-            # 1. Simulate detections from each perception module
-            merged: Dict[str, Dict[str, Any]] = {}
+            # 1. Simulate raw detections from each perception module
+            raw_detections: List[Dict[str, Any]] = []
             print(f"\n[t={data.time:.1f}s] Detection round:")
             for module_name, aliases in aliases_by_module.items():
-                for det in simulate_detections(
-                    module_name, aliases, env.asset_manager, env.registry, z_center, rng
-                ):
-                    merged[det["name"]] = det  # last-write-wins per instance
+                raw_detections.extend(
+                    simulate_detections(module_name, aliases, env.asset_manager, z_center, rng)
+                )
 
-            # 2. Apply detections via fork/sync (the core pattern)
-            if merged:
+            # 2. Tracker assigns persistent instance names
+            updates = tracker.associate(raw_detections)
+
+            # 3. Apply via fork/sync (the core pattern)
+            if updates:
                 with env.fork() as perception_fork:
-                    perception_fork.update(list(merged.values()), hide_unlisted=True)
+                    perception_fork.update(updates, hide_unlisted=True)
                     env.sync_from(perception_fork)
+
+                for u in updates:
+                    print(f"  -> {u['name']} at ({u['pos'][0]:+.2f}, {u['pos'][1]:+.2f})")
 
             viewer.sync()
             time.sleep(0.5)
