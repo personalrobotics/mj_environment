@@ -10,16 +10,11 @@ import mujoco
 import numpy as np
 from typing import Dict, List, Any, NamedTuple, Optional, Union, Sequence
 
-from .constants import (
-    DEFAULT_HIDE_POSITION,
-    IDENTITY_QUATERNION,
-    POSITION_DIM,
-    QUATERNION_DIM,
-    DOF_DIM,
-    RGBA_ALPHA_CHANNEL,
-    HIDE_GRID_SPACING,
-    QUAT_NORM_EPSILON,
-)
+# Project constants
+DEFAULT_HIDE_POSITION = [0, 0, -1]
+HIDE_GRID_SPACING = 0.5  # meters between hidden object parking spots
+IDENTITY_QUATERNION = np.array([1.0, 0.0, 0.0, 0.0], dtype=float)
+_QUAT_NORM_EPSILON = 1e-10
 from .exceptions import (
     ObjectTypeNotFoundError,
     ObjectNotFoundError,
@@ -37,10 +32,10 @@ def _normalize_quaternion(quat: Union[Sequence[float], np.ndarray]) -> np.ndarra
     """Normalize a quaternion to unit length. Raises ValueError for near-zero input."""
     q = np.array(quat, dtype=float)
     norm = np.linalg.norm(q)
-    if norm < QUAT_NORM_EPSILON:
+    if norm < _QUAT_NORM_EPSILON:
         raise ValueError(
             f"Cannot normalize near-zero quaternion {q}. "
-            f"Magnitude {norm} is below threshold {QUAT_NORM_EPSILON}."
+            f"Magnitude {norm} is below threshold {_QUAT_NORM_EPSILON}."
         )
     return q / norm
 
@@ -224,7 +219,7 @@ class ObjectRegistry:
         for name, pos in self._hide_positions.items():
             if not self.active_objects.get(name, False):
                 indices = self._index_cache.get_body_indices(name)
-                self.data.qpos[indices.qpos_adr:indices.qpos_adr + POSITION_DIM] = pos
+                self.data.qpos[indices.qpos_adr:indices.qpos_adr + 3] = pos
 
     def copy(self, new_data: mujoco.MjData) -> 'ObjectRegistry':
         """
@@ -293,13 +288,13 @@ class ObjectRegistry:
             if geom_id in self.geom_visibility:
                 if visible:
                     # Restore original alpha and collision settings
-                    self.model.geom_rgba[geom_id, RGBA_ALPHA_CHANNEL] = self.geom_visibility[geom_id][RGBA_ALPHA_CHANNEL]
+                    self.model.geom_rgba[geom_id, 3] = self.geom_visibility[geom_id][3]
                     contype, conaffinity = self.geom_collision[geom_id]
                     self.model.geom_contype[geom_id] = contype
                     self.model.geom_conaffinity[geom_id] = conaffinity
                 else:
                     # Set alpha to 0 (invisible) and disable collisions
-                    self.model.geom_rgba[geom_id, RGBA_ALPHA_CHANNEL] = 0.0
+                    self.model.geom_rgba[geom_id, 3] = 0.0
                     self.model.geom_contype[geom_id] = 0
                     self.model.geom_conaffinity[geom_id] = 0
             else:
@@ -343,12 +338,12 @@ class ObjectRegistry:
             raise ObjectPoolExhaustedError(obj_type, len(all_instances), all_instances)
         name = candidates[0]
         indices = self._index_cache.get_body_indices(name)
-        self.data.qpos[indices.qpos_adr:indices.qpos_adr+POSITION_DIM] = np.array(pos, dtype=float)
+        self.data.qpos[indices.qpos_adr:indices.qpos_adr+3] = np.array(pos, dtype=float)
         if quat is None:
-            self.data.qpos[indices.qpos_adr+POSITION_DIM:indices.qpos_adr+POSITION_DIM+QUATERNION_DIM] = IDENTITY_QUATERNION
+            self.data.qpos[indices.qpos_adr+3:indices.qpos_adr+3+4] = IDENTITY_QUATERNION
         else:
-            self.data.qpos[indices.qpos_adr+POSITION_DIM:indices.qpos_adr+POSITION_DIM+QUATERNION_DIM] = _normalize_quaternion(quat)
-        self.data.qvel[indices.qvel_adr:indices.qvel_adr+DOF_DIM] = 0
+            self.data.qpos[indices.qpos_adr+3:indices.qpos_adr+3+4] = _normalize_quaternion(quat)
+        self.data.qvel[indices.qvel_adr:indices.qvel_adr+6] = 0
         self._set_body_visibility(indices.body_id, visible=True)
         self.active_objects[name] = True
         logger.debug("Activated %s", name)
@@ -361,9 +356,9 @@ class ObjectRegistry:
         if not self.active_objects[name]:
             return
         indices = self._index_cache.get_body_indices(name)
-        self.data.qpos[indices.qpos_adr:indices.qpos_adr+POSITION_DIM] = self._hide_positions[name]
-        self.data.qpos[indices.qpos_adr+POSITION_DIM:indices.qpos_adr+POSITION_DIM+QUATERNION_DIM] = IDENTITY_QUATERNION
-        self.data.qvel[indices.qvel_adr:indices.qvel_adr+DOF_DIM] = 0
+        self.data.qpos[indices.qpos_adr:indices.qpos_adr+3] = self._hide_positions[name]
+        self.data.qpos[indices.qpos_adr+3:indices.qpos_adr+3+4] = IDENTITY_QUATERNION
+        self.data.qvel[indices.qvel_adr:indices.qvel_adr+6] = 0
         self._set_body_visibility(indices.body_id, visible=False)
         self.active_objects[name] = False
         logger.debug("Hid %s", name)
@@ -431,9 +426,9 @@ class ObjectRegistry:
                 active_now.add(new_name)
             else:
                 indices = self._index_cache.get_body_indices(name)
-                self.data.qpos[indices.qpos_adr:indices.qpos_adr+POSITION_DIM] = pos
-                self.data.qpos[indices.qpos_adr+POSITION_DIM:indices.qpos_adr+POSITION_DIM+QUATERNION_DIM] = quat
-                self.data.qvel[indices.qvel_adr:indices.qvel_adr+DOF_DIM] = 0
+                self.data.qpos[indices.qpos_adr:indices.qpos_adr+3] = pos
+                self.data.qpos[indices.qpos_adr+3:indices.qpos_adr+3+4] = quat
+                self.data.qvel[indices.qvel_adr:indices.qvel_adr+6] = 0
                 # Make sure the object is visible (it might have been hidden previously)
                 if not self.active_objects[name]:
                     self._set_body_visibility(indices.body_id, visible=True)

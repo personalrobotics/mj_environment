@@ -63,8 +63,7 @@ def _prefix_names_in_subtree(elem: Element, prefix: str) -> None:
 from asset_manager import AssetManager
 
 # Local
-from .constants import DEFAULT_HIDE_POSITION, POSITION_DIM, QUATERNION_DIM
-from .constants import STATE_IO_SCHEMA_VERSION
+from .object_registry import DEFAULT_HIDE_POSITION
 from .exceptions import ConfigurationError, ObjectNotFoundError, StateError
 from .object_registry import ObjectRegistry
 from .types import Detection, ObjectMetadata
@@ -514,8 +513,8 @@ class Environment:
         for name, is_active in self.registry.active_objects.items():
             if is_active or include_inactive:
                 indices = self.registry._index_cache.get_body_indices(name)
-                pos = self.data.qpos[indices.qpos_adr:indices.qpos_adr+POSITION_DIM].tolist()
-                quat = self.data.qpos[indices.qpos_adr+POSITION_DIM:indices.qpos_adr+POSITION_DIM+QUATERNION_DIM].tolist()
+                pos = self.data.qpos[indices.qpos_adr:indices.qpos_adr+3].tolist()
+                quat = self.data.qpos[indices.qpos_adr+3:indices.qpos_adr+3+4].tolist()
                 active_objects[name] = {
                     "pos": pos,
                     "quat": quat,
@@ -562,7 +561,7 @@ class Environment:
             active_dict = {name: True for name in active_objects}
 
         state = {
-            "schema_version": STATE_IO_SCHEMA_VERSION,
+            "schema_version": 1,
             "qpos": self.data.qpos.tolist(),
             "qvel": self.data.qvel.tolist(),
             "active_objects": active_dict,
@@ -592,9 +591,9 @@ class Environment:
                 hint="Check that the file contains valid YAML.",
             ) from e
 
-        if state.get("schema_version") != STATE_IO_SCHEMA_VERSION:
+        if state.get("schema_version") != 1:
             raise StateError(
-                f"Incompatible schema version: found {state.get('schema_version')}, expected {STATE_IO_SCHEMA_VERSION}",
+                f"Incompatible schema version: found {state.get('schema_version')}, expected {1}",
                 hint="This state file was saved with a different version of mj_environment.",
             )
 
