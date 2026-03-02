@@ -283,8 +283,6 @@ logging.basicConfig(level=logging.DEBUG)
 logging.getLogger("mj_environment").setLevel(logging.DEBUG)
 ```
 
-The `verbose=True` parameter still works for backward compatibility and enables DEBUG-level logging automatically.
-
 ## License
 
 BSD-3-Clause — [Personal Robotics Laboratory](https://github.com/personalrobotics), University of Washington

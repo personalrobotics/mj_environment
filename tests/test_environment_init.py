@@ -7,7 +7,6 @@ def env():
         base_scene_xml="data/scene.xml",
         objects_dir="data/objects",
         scene_config_yaml="data/scene_config.yaml",
-        verbose=False,
     )
 
 def test_environment_loads(env):
@@ -81,7 +80,6 @@ class TestRobotOnlyScene:
             base_scene_xml="data/scene.xml",
             objects_dir=None,
             scene_config_yaml=None,
-            verbose=False,
         )
         assert env.model is not None
         assert env.data is not None
@@ -92,7 +90,6 @@ class TestRobotOnlyScene:
             base_scene_xml="data/scene.xml",
             objects_dir=None,
             scene_config_yaml=None,
-            verbose=False,
         )
         assert env.registry is None
         assert env.asset_manager is None
@@ -104,7 +101,6 @@ class TestRobotOnlyScene:
             base_scene_xml="data/scene.xml",
             objects_dir=None,
             scene_config_yaml=None,
-            verbose=False,
         )
         status = env.status()
         assert "time" in status
@@ -118,7 +114,6 @@ class TestRobotOnlyScene:
             base_scene_xml="data/scene.xml",
             objects_dir=None,
             scene_config_yaml=None,
-            verbose=False,
         )
         fork = env.fork()
         assert fork.model is not None
@@ -132,7 +127,6 @@ class TestRobotOnlyScene:
             base_scene_xml="data/scene.xml",
             objects_dir=None,
             scene_config_yaml=None,
-            verbose=False,
         )
         fork = env.fork()
 
@@ -148,7 +142,6 @@ class TestRobotOnlyScene:
             base_scene_xml="data/scene.xml",
             objects_dir=None,
             scene_config_yaml=None,
-            verbose=False,
         )
         # Save state (even if qpos is empty, it should work)
         state_file = str(tmp_path / "state.yaml")

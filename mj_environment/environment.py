@@ -88,14 +88,8 @@ class Environment:
         objects_dir: Optional[str] = None,
         scene_config_yaml: Optional[str] = None,
         hide_pos: List[float] = [0, 0, -1],
-        verbose: bool = False,
     ):
-        self.verbose = verbose
         self.hide_pos = hide_pos
-
-        # Set log level only — callers configure handlers
-        if verbose:
-            logging.getLogger("mj_environment").setLevel(logging.DEBUG)
 
         # ------------------------------------------------------------------
         # 1️⃣ Load scene config and determine if we have objects to manage
@@ -107,7 +101,7 @@ class Environment:
         # 2️⃣ Asset Manager: load YAML metadata + object XMLs (if objects exist)
         # ------------------------------------------------------------------
         if self._has_objects:
-            self.asset_manager: Optional[AssetManager] = AssetManager(base_dir=objects_dir, verbose=verbose)
+            self.asset_manager: Optional[AssetManager] = AssetManager(base_dir=objects_dir)
         else:
             self.asset_manager = None
 
@@ -138,7 +132,7 @@ class Environment:
         # ------------------------------------------------------------------
         if self._has_objects:
             self.registry: Optional[ObjectRegistry] = ObjectRegistry(
-                self.model, self.data, self.asset_manager, self._scene_cfg, hide_pos, verbose
+                self.model, self.data, self.asset_manager, self._scene_cfg, hide_pos
             )
         else:
             self.registry = None
@@ -681,7 +675,6 @@ class Environment:
         fork.assets = self.assets  # Assets dict is shared (read-only)
         fork.asset_manager = self.asset_manager
         fork.hide_pos = self.hide_pos
-        fork.verbose = self.verbose
         fork._geom_original_size = self._geom_original_size  # Read-only cache
         fork._has_objects = self._has_objects
 

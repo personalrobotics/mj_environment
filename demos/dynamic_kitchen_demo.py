@@ -21,7 +21,6 @@ def dynamic_kitchen_demo():
         base_scene_xml="data/scene.xml",
         objects_dir="data/objects",
         scene_config_yaml="data/scene_config.yaml",
-        verbose=True,
     )
 
     model = env.model

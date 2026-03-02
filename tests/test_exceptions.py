@@ -25,7 +25,6 @@ def env():
         base_scene_xml="data/scene.xml",
         objects_dir="data/objects",
         scene_config_yaml="data/scene_config.yaml",
-        verbose=False,
     )
 
 
@@ -136,7 +135,6 @@ class TestConfigurationError:
                 base_scene_xml="data/scene.xml",
                 objects_dir="data/objects",
                 scene_config_yaml="nonexistent_config.yaml",
-                verbose=False,
             )
 
         error_msg = str(exc_info.value)
@@ -150,7 +148,6 @@ class TestConfigurationError:
                 base_scene_xml="data/scene.xml",
                 objects_dir="data/objects",
                 scene_config_yaml="missing.yaml",
-                verbose=False,
             )
 
     def test_error_attributes(self):
@@ -160,7 +157,6 @@ class TestConfigurationError:
                 base_scene_xml="data/scene.xml",
                 objects_dir="data/objects",
                 scene_config_yaml="missing.yaml",
-                verbose=False,
             )
         except ConfigurationError as e:
             assert e.path is not None
@@ -274,26 +270,6 @@ class TestObjectPoolExhaustedError:
         assert error.obj_type == "plate"
         assert error.total == 2
         assert error.active == ["plate_0", "plate_1"]
-
-
-class TestVerboseLogging:
-    """Test that verbose flag sets level without adding handlers."""
-
-    def test_verbose_sets_level_without_handlers(self):
-        """verbose=True sets DEBUG level but does not add handlers."""
-        import logging
-        mj_logger = logging.getLogger("mj_environment")
-        handlers_before = len(mj_logger.handlers)
-
-        Environment(
-            base_scene_xml="data/scene.xml",
-            objects_dir="data/objects",
-            scene_config_yaml="data/scene_config.yaml",
-            verbose=True,
-        )
-
-        assert mj_logger.level == logging.DEBUG
-        assert len(mj_logger.handlers) == handlers_before
 
 
 class TestExceptionHierarchy:
