@@ -1,7 +1,7 @@
 import pytest
 import numpy as np
 import mujoco
-from mj_environment.constants import HIDE_GRID_SPACING, POSITION_DIM
+from mj_environment.object_registry import HIDE_GRID_SPACING
 from mj_environment.environment import Environment
 
 @pytest.fixture
@@ -109,7 +109,7 @@ def test_hide_returns_object_to_its_grid_spot(env):
 
     # Read back position from qpos
     indices = registry._index_cache.get_body_indices(name)
-    actual_pos = registry.data.qpos[indices.qpos_adr:indices.qpos_adr + POSITION_DIM]
+    actual_pos = registry.data.qpos[indices.qpos_adr:indices.qpos_adr + 3]
     assert np.allclose(actual_pos, expected_pos), (
         f"Expected hide position {expected_pos}, got {actual_pos}"
     )
