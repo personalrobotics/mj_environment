@@ -201,6 +201,12 @@ class Environment:
         Returns:
             Tuple of (xml_string, assets_dict) where assets_dict contains mesh files for assets
         """
+        if not os.path.exists(base_scene_xml):
+            raise ConfigurationError(
+                f"Base scene XML not found: {base_scene_xml}",
+                hint="Check that the path is correct and the file exists.",
+            )
+
         assets_dict: dict[str, bytes] = {}
 
         mujoco_el = Element("mujoco", {"model": "autogen_scene"})
@@ -313,11 +319,13 @@ class Environment:
         obj_dir = os.path.dirname(xml_path)
         mesh_path = os.path.join(obj_dir, mesh_file)
 
-        if os.path.exists(mesh_path):
-            with open(mesh_path, 'rb') as f:
-                assets_dict[mesh_file] = f.read()
-        else:
-            logger.warning("Mesh file not found: %s", mesh_path)
+        if not os.path.exists(mesh_path):
+            raise ConfigurationError(
+                f"Mesh file not found: {mesh_path}",
+                hint=f"Check that mesh files exist relative to {os.path.dirname(xml_path)}",
+            )
+        with open(mesh_path, 'rb') as f:
+            assets_dict[mesh_file] = f.read()
 
     def _add_object_instances(
         self,
@@ -368,9 +376,8 @@ class Environment:
             # Apply overrides to all instances of this object type
             for i in range(count):
                 instance_name = f"{obj_type}_{i}"
-                try:
-                    body_id = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_BODY, instance_name)
-                except (TypeError, AttributeError):
+                body_id = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_BODY, instance_name)
+                if body_id == -1:
                     continue
                 
                 # Apply mass override

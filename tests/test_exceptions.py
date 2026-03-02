@@ -4,7 +4,9 @@ Tests for custom exception classes and error messages.
 Verifies that exceptions provide helpful context and suggestions.
 """
 
+import os
 import pytest
+from pathlib import Path
 from mj_environment import (
     Environment,
     MjEnvironmentError,
@@ -147,6 +149,56 @@ class TestConfigurationError:
         except ConfigurationError as e:
             assert e.path is not None
             assert e.hint is not None
+
+    def test_missing_base_scene_xml_raises(self):
+        """Missing base_scene_xml raises ConfigurationError with path in message.
+
+        Regression test for Issue #27.
+        """
+        with pytest.raises(ConfigurationError) as exc_info:
+            Environment(base_scene_xml="nonexistent_scene.xml")
+
+        assert "nonexistent_scene.xml" in str(exc_info.value)
+        assert "Hint:" in str(exc_info.value)
+
+    def test_missing_mesh_file_raises(self, tmp_path):
+        """Object XML referencing a missing mesh raises ConfigurationError immediately.
+
+        Previously, a warning was logged and MuJoCo would fail later with an
+        opaque error. Regression test for Issue #27.
+        """
+        # Create a minimal object XML that references a non-existent mesh
+        obj_dir = tmp_path / "objects" / "cube"
+        obj_dir.mkdir(parents=True)
+        (obj_dir / "cube.xml").write_text(
+            "<mujoco>\n"
+            "  <asset>\n"
+            "    <mesh name='cube_mesh' file='cube.stl'/>\n"
+            "  </asset>\n"
+            "  <worldbody>\n"
+            "    <body name='cube'>\n"
+            "      <geom type='box' size='.05 .05 .05'/>\n"
+            "    </body>\n"
+            "  </worldbody>\n"
+            "</mujoco>\n"
+        )
+        # meta.yaml is required for AssetManager to index this as a known asset
+        (obj_dir / "meta.yaml").write_text(
+            "name: cube\nmujoco:\n  xml_path: cube.xml\n"
+        )
+        (tmp_path / "scene_config.yaml").write_text("objects:\n  cube:\n    count: 1\n")
+
+        # cube.stl does not exist — should raise immediately with a clear error
+        with pytest.raises(ConfigurationError) as exc_info:
+            Environment(
+                base_scene_xml="data/scene.xml",
+                objects_dir=str(tmp_path / "objects"),
+                scene_config_yaml=str(tmp_path / "scene_config.yaml"),
+            )
+
+        error_msg = str(exc_info.value)
+        assert "cube.stl" in error_msg or "Mesh file not found" in error_msg
+        assert "Hint:" in error_msg
 
 
 class TestStateError:

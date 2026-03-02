@@ -107,12 +107,12 @@ class ObjectRegistry:
             for i in range(count):
                 name = f"{obj_type}_{i}"
                 # Verify object exists in the model (it should be preloaded by Environment)
-                try:
-                    body_id = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_BODY, name)
-                    self.objects[obj_type]["instances"].append(name)
-                    self.active_objects[name] = False
-                except (TypeError, AttributeError):
+                body_id = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_BODY, name)
+                if body_id == -1:
                     logger.warning("Object '%s' not found in model, skipping", name)
+                    continue
+                self.objects[obj_type]["instances"].append(name)
+                self.active_objects[name] = False
 
             logger.debug("Preloaded %d %s(s)", count, obj_type)
 
