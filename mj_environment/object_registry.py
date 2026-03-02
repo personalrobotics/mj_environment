@@ -150,11 +150,10 @@ class ObjectRegistry:
                 logger.warning("Unknown asset '%s', skipping preload", obj_type)
                 continue
 
-            count = entry.get("count", 1)
-            self.objects[obj_type] = {"count": count, "instances": []}
+            names = entry.get("names", [f"{obj_type}_{i}" for i in range(entry.get("count", 1))])
+            self.objects[obj_type] = {"count": len(names), "instances": []}
 
-            for i in range(count):
-                name = f"{obj_type}_{i}"
+            for name in names:
                 # Verify object exists in the model (it should be preloaded by Environment)
                 body_id = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_BODY, name)
                 if body_id == -1:
@@ -163,7 +162,7 @@ class ObjectRegistry:
                 self.objects[obj_type]["instances"].append(name)
                 self.active_objects[name] = False
 
-            logger.debug("Preloaded %d %s(s)", count, obj_type)
+            logger.debug("Preloaded %d %s(s)", len(names), obj_type)
 
     def _cache_geom_properties(self):
         """Cache original RGBA colors and collision settings for all object geoms."""
@@ -261,19 +260,24 @@ class ObjectRegistry:
 
     def _parse_object_type(self, instance_name: str) -> Optional[str]:
         """
-        Parse object type from instance name, handling underscores correctly.
+        Parse object type from instance name.
+
+        Checks direct registry membership first (handles custom names),
+        then falls back to parsing the {type}_{index} pattern.
 
         Examples:
             cup_0 -> cup
             kitchen_knife_2 -> kitchen_knife
-            my_cool_object_15 -> my_cool_object (if registered)
+            recycle_bin_right -> recycle_bin (if registered as custom name)
         """
-        # Check each registered object type to find a match
+        # Direct lookup: handles custom names
+        for obj_type, info in self.objects.items():
+            if instance_name in info["instances"]:
+                return obj_type
+        # Fallback: parse {type}_{index} pattern
         for obj_type in self.objects:
-            # Instance names follow pattern: {obj_type}_{index}
             if instance_name.startswith(obj_type + "_"):
                 suffix = instance_name[len(obj_type) + 1:]
-                # Verify suffix is a valid index (digits only)
                 if suffix.isdigit():
                     return obj_type
         return None
@@ -455,6 +459,28 @@ class ObjectRegistry:
             ...     print("Cup is visible")
         """
         return self.active_objects.get(name, False)
+
+    def get_type(self, instance_name: str) -> str:
+        """
+        Get the object type for an instance name.
+
+        Args:
+            instance_name: Instance name (e.g., "cup_0" or a custom name)
+
+        Returns:
+            Object type string (e.g., "cup")
+
+        Raises:
+            ObjectNotFoundError: If instance_name is not in the registry
+
+        Example:
+            >>> registry.get_type("cup_0")
+            'cup'
+        """
+        for obj_type, info in self.objects.items():
+            if instance_name in info["instances"]:
+                return obj_type
+        raise ObjectNotFoundError(instance_name, list(self.active_objects.keys()))
 
     def sync_visibility(self) -> None:
         """

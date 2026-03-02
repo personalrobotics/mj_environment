@@ -220,7 +220,7 @@ class Environment:
         Parse all object XMLs once and return cached data.
 
         Returns:
-            Dict mapping obj_type to {xml_path, root, count} for each valid object
+            Dict mapping obj_type to {xml_path, root, count, names} for each valid object
         """
         parsed = {}
 
@@ -238,12 +238,38 @@ class Environment:
                 logger.warning("XML file not found for '%s' at %s, skipping", obj_type, xml_path)
                 continue
 
+            # Resolve instance names: explicit names list or auto-generated
+            custom_names = entry.get("names")
+            count = entry.get("count")
+            if custom_names is not None and count is not None:
+                raise ConfigurationError(
+                    f"Object type '{obj_type}' specifies both 'names' and 'count'",
+                    hint="Use 'names' for custom instance names, or 'count' for auto-generated names, not both.",
+                )
+            if custom_names is not None:
+                names = list(custom_names)
+            else:
+                n = count if count is not None else 1
+                names = [f"{obj_type}_{i}" for i in range(n)]
+
             obj_tree = ETparse(xml_path)
             parsed[obj_type] = {
                 'xml_path': xml_path,
                 'root': obj_tree.getroot(),
-                'count': entry.get("count", 1),
+                'count': len(names),
+                'names': names,
             }
+
+        # Validate no duplicate names across all types
+        all_names: List[str] = []
+        for obj_data in parsed.values():
+            for name in obj_data['names']:
+                if name in all_names:
+                    raise ConfigurationError(
+                        f"Duplicate instance name '{name}' in scene config",
+                        hint="Each instance name must be unique across all object types.",
+                    )
+                all_names.append(name)
 
         return parsed
 
@@ -317,21 +343,20 @@ class Environment:
         """
         Add object body instances to the worldbody element.
 
-        Creates numbered instances (e.g., cup_0, cup_1) for each object type,
+        Creates named instances for each object type,
         positioning them at hide_pos and prefixing nested element names.
 
         Args:
             parsed_objects: Dict from _parse_object_xmls()
             worldbody_el: The <worldbody> element to add bodies to
         """
-        for obj_type, obj_data in parsed_objects.items():
+        for _, obj_data in parsed_objects.items():
             obj_worldbody = obj_data['root'].find("worldbody")
             if obj_worldbody is None:
                 logger.warning("No worldbody found in %s, skipping", obj_data['xml_path'])
                 continue
 
-            for i in range(obj_data['count']):
-                instance_name = f"{obj_type}_{i}"
+            for instance_name in obj_data['names']:
                 for obj_body in obj_worldbody.findall("body"):
                     new_body = _deep_copy_element(obj_body, worldbody_el)
                     new_body.set("name", instance_name)
@@ -353,11 +378,10 @@ class Environment:
             
             # Get metadata from AssetManager
             meta = self.asset_manager.get(obj_type)
-            count = entry.get("count", 1)
-            
+            names = entry.get("names", [f"{obj_type}_{i}" for i in range(entry.get("count", 1))])
+
             # Apply overrides to all instances of this object type
-            for i in range(count):
-                instance_name = f"{obj_type}_{i}"
+            for instance_name in names:
                 body_id = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_BODY, instance_name)
                 if body_id == -1:
                     continue
