@@ -93,12 +93,9 @@ class Environment:
         self.verbose = verbose
         self.hide_pos = hide_pos
 
-        # Configure logging based on verbose flag (for backward compatibility)
-        if verbose and not logger.handlers:
-            handler = logging.StreamHandler()
-            handler.setFormatter(logging.Formatter("[%(name)s] %(message)s"))
-            logger.addHandler(handler)
-            logger.setLevel(logging.DEBUG)
+        # Set log level only — callers configure handlers
+        if verbose:
+            logging.getLogger("mj_environment").setLevel(logging.DEBUG)
 
         # ------------------------------------------------------------------
         # 1️⃣ Load scene config and determine if we have objects to manage
@@ -161,9 +158,14 @@ class Environment:
         if objects_dir is None and scene_config_yaml is None:
             return {}
 
-        # If one is provided but not the other, treat as robot-only
+        # Both must be provided together
         if objects_dir is None or scene_config_yaml is None:
-            return {}
+            provided = "objects_dir" if objects_dir else "scene_config_yaml"
+            missing = "scene_config_yaml" if objects_dir else "objects_dir"
+            raise ConfigurationError(
+                f"{provided} was provided without {missing}",
+                hint=f"Provide both objects_dir and scene_config_yaml, or neither (robot-only).",
+            )
 
         # Config file provided - must exist
         if not os.path.exists(scene_config_yaml):
@@ -565,13 +567,30 @@ class Environment:
             "qvel": self.data.qvel.tolist(),
             "active_objects": active_dict,
         }
-        with open(path, "w") as f:
-            yaml.safe_dump(state, f)
+        try:
+            with open(path, "w") as f:
+                yaml.safe_dump(state, f)
+        except OSError as e:
+            raise StateError(
+                f"Failed to save state to {path}: {e}",
+                hint="Check that the directory exists and is writable.",
+            ) from e
 
     def load_state(self, path: str) -> None:
         """Load simulation state from YAML."""
-        with open(path, "r") as f:
-            state = yaml.safe_load(f)
+        try:
+            with open(path, "r") as f:
+                state = yaml.safe_load(f)
+        except OSError as e:
+            raise StateError(
+                f"Failed to load state from {path}: {e}",
+                hint="Check that the file exists and is readable.",
+            ) from e
+        except yaml.YAMLError as e:
+            raise StateError(
+                f"Failed to parse state file {path}: {e}",
+                hint="Check that the file contains valid YAML.",
+            ) from e
 
         if state.get("schema_version") != STATE_IO_SCHEMA_VERSION:
             raise StateError(

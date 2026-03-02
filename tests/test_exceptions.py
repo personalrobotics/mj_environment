@@ -113,6 +113,22 @@ class TestObjectNotFoundError:
 class TestConfigurationError:
     """Test ConfigurationError for config file issues."""
 
+    def test_partial_config_objects_dir_only(self):
+        """Providing objects_dir without scene_config_yaml raises ConfigurationError."""
+        with pytest.raises(ConfigurationError, match="objects_dir.*without.*scene_config_yaml"):
+            Environment(
+                base_scene_xml="data/scene.xml",
+                objects_dir="data/objects",
+            )
+
+    def test_partial_config_scene_config_only(self):
+        """Providing scene_config_yaml without objects_dir raises ConfigurationError."""
+        with pytest.raises(ConfigurationError, match="scene_config_yaml.*without.*objects_dir"):
+            Environment(
+                base_scene_xml="data/scene.xml",
+                scene_config_yaml="data/scene_config.yaml",
+            )
+
     def test_missing_config_file(self):
         """Missing config file raises ConfigurationError."""
         with pytest.raises(ConfigurationError) as exc_info:
@@ -216,6 +232,23 @@ class TestStateError:
         with pytest.raises(MjEnvironmentError):
             raise StateError("test")
 
+    def test_load_state_missing_file(self, env):
+        """Loading from nonexistent file raises StateError with path context."""
+        with pytest.raises(StateError, match="Failed to load state.*nonexistent"):
+            env.load_state("/tmp/nonexistent_state.yaml")
+
+    def test_load_state_invalid_yaml(self, env, tmp_path):
+        """Loading invalid YAML raises StateError with parse context."""
+        bad_file = tmp_path / "bad.yaml"
+        bad_file.write_text(": : : not valid yaml {{{")
+        with pytest.raises(StateError, match="Failed to parse state file"):
+            env.load_state(str(bad_file))
+
+    def test_save_state_unwritable_path(self, env):
+        """Saving to unwritable path raises StateError with context."""
+        with pytest.raises(StateError, match="Failed to save state"):
+            env.save_state("/nonexistent_dir/state.yaml")
+
 
 class TestObjectPoolExhaustedError:
     """Test ObjectPoolExhaustedError when all instances are active."""
@@ -241,6 +274,26 @@ class TestObjectPoolExhaustedError:
         assert error.obj_type == "plate"
         assert error.total == 2
         assert error.active == ["plate_0", "plate_1"]
+
+
+class TestVerboseLogging:
+    """Test that verbose flag sets level without adding handlers."""
+
+    def test_verbose_sets_level_without_handlers(self):
+        """verbose=True sets DEBUG level but does not add handlers."""
+        import logging
+        mj_logger = logging.getLogger("mj_environment")
+        handlers_before = len(mj_logger.handlers)
+
+        Environment(
+            base_scene_xml="data/scene.xml",
+            objects_dir="data/objects",
+            scene_config_yaml="data/scene_config.yaml",
+            verbose=True,
+        )
+
+        assert mj_logger.level == logging.DEBUG
+        assert len(mj_logger.handlers) == handlers_before
 
 
 class TestExceptionHierarchy:
