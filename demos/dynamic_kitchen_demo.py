@@ -100,7 +100,7 @@ def dynamic_kitchen_demo():
 
                     # Step the fork's physics a few times
                     for _ in range(10):
-                        planning_env.sim.step()
+                        planning_env.step()
 
                     print(f"[Fork Demo] Fork sim time: {planning_env.data.time:.3f}s")
                     print(f"[Fork Demo] Original sim time: {env.data.time:.3f}s (unchanged)")

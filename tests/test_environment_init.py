@@ -85,7 +85,6 @@ class TestRobotOnlyScene:
         )
         assert env.model is not None
         assert env.data is not None
-        assert env.sim is not None
 
     def test_robot_only_has_no_registry(self):
         """Robot-only environment has registry=None and asset_manager=None."""

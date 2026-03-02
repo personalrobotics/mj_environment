@@ -45,7 +45,7 @@ class MockPlanner:
         self.current_step += 1
 
         # Simulate planning work by stepping physics
-        fork.sim.step()
+        fork.step()
 
         # Record trajectory point
         self._trajectory.append(fork.data.time)
