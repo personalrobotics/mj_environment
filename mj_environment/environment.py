@@ -3,8 +3,7 @@
 # Standard library
 import logging
 import os
-import warnings
-from typing import List, Dict, Any, Optional, Union, overload
+from typing import List, Dict, Any, Optional, Union
 from xml.dom import minidom
 from xml.etree.ElementTree import Element, SubElement, tostring, parse as ETparse
 
@@ -608,7 +607,7 @@ class Environment:
     # ------------------------------------------------------------------
     # Forking for Planning
     # ------------------------------------------------------------------
-    def fork(self, n: Optional[int] = None) -> Union['Environment', List['Environment']]:
+    def fork(self) -> 'Environment':
         """
         Create a functional clone with independent state for planning.
 
@@ -616,10 +615,6 @@ class Environment:
         independent simulation state (MjData, ObjectRegistry). This enables:
         - Motion planning without polluting the original environment
         - Multiple planners running in parallel on separate forks
-
-        Args:
-            n: DEPRECATED. Use fork_many(n) for multiple forks.
-               If provided, calls fork_many(n) with deprecation warning.
 
         Returns:
             A single Environment instance.
@@ -635,14 +630,6 @@ class Environment:
             with env.fork() as planning_env:
                 trajectory = planner.plan(planning_env)
         """
-        if n is not None:
-            warnings.warn(
-                "fork(n=...) is deprecated and will be removed in v2.0. "
-                "Use fork_many(n) for creating multiple forks instead.",
-                DeprecationWarning,
-                stacklevel=2
-            )
-            return self.fork_many(n)
         return self._create_fork()
 
     def fork_many(self, n: int) -> List['Environment']:
@@ -740,5 +727,5 @@ class Environment:
         return self
 
     def __exit__(self, exc_type, exc_val, exc_tb) -> None:
-        """Exit context manager. Cleanup is handled by garbage collection."""
+        """Exit context manager. No-op; exists so forks can be used with `with` for scoping."""
         pass
