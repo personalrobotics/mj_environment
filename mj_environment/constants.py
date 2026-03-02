@@ -12,6 +12,7 @@ DOF_DIM = 6
 RGBA_ALPHA_CHANNEL = 3
 
 # Hide grid
+DEFAULT_HIDE_POSITION = [0, 0, -1]
 HIDE_GRID_SPACING = 0.5  # meters between hidden object parking spots
 
 # Schema

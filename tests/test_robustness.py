@@ -11,7 +11,7 @@ import numpy as np
 import mujoco
 import os
 from mj_environment.environment import Environment
-from mj_environment.quaternion import normalize_quaternion
+from mj_environment.object_registry import _normalize_quaternion as normalize_quaternion
 
 
 @pytest.fixture

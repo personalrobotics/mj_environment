@@ -63,10 +63,9 @@ def _prefix_names_in_subtree(elem: Element, prefix: str) -> None:
 from asset_manager import AssetManager
 
 # Local
-from .constants import POSITION_DIM, QUATERNION_DIM
+from .constants import DEFAULT_HIDE_POSITION, POSITION_DIM, QUATERNION_DIM
 from .constants import STATE_IO_SCHEMA_VERSION
 from .exceptions import ConfigurationError, ObjectNotFoundError, StateError
-from .mujoco_helpers import MujocoIndexCache
 from .object_registry import ObjectRegistry
 from .types import Detection, ObjectMetadata
 
@@ -87,7 +86,7 @@ class Environment:
         base_scene_xml: str,
         objects_dir: Optional[str] = None,
         scene_config_yaml: Optional[str] = None,
-        hide_pos: List[float] = [0, 0, -1],
+        hide_pos: List[float] = DEFAULT_HIDE_POSITION,
     ):
         self.hide_pos = hide_pos
 
