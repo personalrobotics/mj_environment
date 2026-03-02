@@ -2,7 +2,7 @@
 Tests for state management fixes (Issue #8).
 
 Tests cover:
-1. Default persist=False behavior in update()
+1. Default hide_unlisted=True behavior in update()
 2. Scale caching to prevent compounding
 """
 
@@ -24,11 +24,11 @@ def env():
     )
 
 
-class TestPersistDefault:
-    """Tests for persist=False default behavior."""
+class TestHideUnlistedDefault:
+    """Tests for hide_unlisted=True default behavior."""
 
-    def test_persist_defaults_to_false(self, env):
-        """Test that update() defaults to persist=False (objects disappear if not in update)."""
+    def test_hide_unlisted_defaults_to_true(self, env):
+        """Test that update() defaults to hide_unlisted=True (objects disappear if not in update)."""
         obj_type = next(iter(env.registry.objects))
         instances = env.registry.objects[obj_type]["instances"]
 
@@ -40,14 +40,14 @@ class TestPersistDefault:
         assert env.registry.active_objects[name1] == True
         assert env.registry.active_objects[name2] == True
 
-        # Update with only one object (default persist=False should hide the other)
+        # Update with only one object (default hide_unlisted=True should hide the other)
         env.update([{"name": name1, "pos": [0.1, 0.1, 0.3], "quat": [1, 0, 0, 0]}])
 
         # name1 should still be active, name2 should be hidden
         assert env.registry.active_objects[name1] == True
         assert env.registry.active_objects[name2] == False
 
-    def test_persist_true_keeps_objects(self, env):
+    def test_hide_unlisted_false_keeps_objects(self, env):
         """Test that hide_unlisted=False keeps objects not in update list."""
         obj_type = next(iter(env.registry.objects))
 
@@ -63,8 +63,8 @@ class TestPersistDefault:
         assert env.registry.active_objects[name1] == True
         assert env.registry.active_objects[name2] == True
 
-    def test_empty_update_hides_all_with_persist_false(self, env):
-        """Test that empty update with persist=False hides all objects."""
+    def test_empty_update_hides_all(self, env):
+        """Test that empty update with default hide_unlisted=True hides all objects."""
         obj_type = next(iter(env.registry.objects))
 
         # Activate an object
@@ -72,13 +72,13 @@ class TestPersistDefault:
         mujoco.mj_forward(env.model, env.data)
         assert env.registry.active_objects[name] == True
 
-        # Empty update with default persist=False
+        # Empty update with default hide_unlisted=True
         env.update([])
 
         # Object should be hidden
         assert env.registry.active_objects[name] == False
 
-    def test_empty_update_with_persist_true_keeps_all(self, env):
+    def test_empty_update_with_hide_unlisted_false_keeps_all(self, env):
         """Test that empty update with hide_unlisted=False keeps all objects."""
         obj_type = next(iter(env.registry.objects))
 

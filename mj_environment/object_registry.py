@@ -5,7 +5,6 @@ Manages object lifecycle (activation, hiding, movement) in MuJoCo.
 
 import logging
 import math
-import warnings
 
 import mujoco
 import numpy as np
@@ -317,7 +316,6 @@ class ObjectRegistry:
         self,
         updates: List[Dict[str, Any]],
         hide_unlisted: Optional[bool] = None,
-        persist: Optional[bool] = None,
     ) -> None:
         """
         Batch activate/move/hide objects based on updates.
@@ -326,9 +324,6 @@ class ObjectRegistry:
             updates: List of dicts with keys: name, pos, quat (optional)
             hide_unlisted: If True (default), hide objects not in updates list.
                           If False, keep previously active objects visible.
-            persist: DEPRECATED. Use hide_unlisted instead.
-                    persist=False is equivalent to hide_unlisted=True
-                    persist=True is equivalent to hide_unlisted=False
 
         Raises:
             TypeError: If updates is not a list
@@ -357,19 +352,6 @@ class ObjectRegistry:
                     raise ValueError(f"updates[{i}] 'pos' must have 3 elements, got {len(pos)} (name={upd['name']!r})")
             except TypeError:
                 raise ValueError(f"updates[{i}] 'pos' must be a sequence, got {type(pos).__name__} (name={upd['name']!r})")
-
-        # Handle parameter deprecation
-        if persist is not None:
-            warnings.warn(
-                "The 'persist' parameter is deprecated and will be removed in v2.0. "
-                "Use 'hide_unlisted' instead: persist=False -> hide_unlisted=True, "
-                "persist=True -> hide_unlisted=False",
-                DeprecationWarning,
-                stacklevel=2
-            )
-            if hide_unlisted is None:
-                hide_unlisted = not persist  # Invert logic
-            # If both provided, hide_unlisted takes precedence (ignore persist)
 
         # Default behavior: hide unlisted objects
         if hide_unlisted is None:
