@@ -1,8 +1,11 @@
+import os
 import pytest
 import numpy as np
 import mujoco
+import yaml
 from mj_environment.object_registry import HIDE_GRID_SPACING
 from mj_environment.environment import Environment
+from mj_environment.exceptions import ConfigurationError
 
 @pytest.fixture
 def env():
@@ -10,6 +13,24 @@ def env():
         base_scene_xml="data/scene.xml",
         objects_dir="data/objects",
         scene_config_yaml="data/scene_config.yaml",
+    )
+
+@pytest.fixture
+def custom_names_env(tmp_path):
+    """Environment with custom instance names."""
+    config = {
+        "objects": {
+            "cup": {"names": ["cup_left", "cup_right"]},
+            "plate": {"count": 1},
+        }
+    }
+    config_path = str(tmp_path / "scene_config.yaml")
+    with open(config_path, "w") as f:
+        yaml.safe_dump(config, f)
+    return Environment(
+        base_scene_xml="data/scene.xml",
+        objects_dir="data/objects",
+        scene_config_yaml=config_path,
     )
 
 def test_activate_and_hide(env):
@@ -113,3 +134,89 @@ def test_hide_returns_object_to_its_grid_spot(env):
     assert np.allclose(actual_pos, expected_pos), (
         f"Expected hide position {expected_pos}, got {actual_pos}"
     )
+
+
+# ---- Custom instance names (#23) ----
+
+class TestCustomInstanceNames:
+    """Tests for optional custom instance names in scene config."""
+
+    def test_custom_names_registered(self, custom_names_env):
+        """Custom names appear as instances in the registry."""
+        instances = custom_names_env.registry.objects["cup"]["instances"]
+        assert instances == ["cup_left", "cup_right"]
+
+    def test_auto_names_still_work(self, custom_names_env):
+        """Types using count still get auto-generated names."""
+        instances = custom_names_env.registry.objects["plate"]["instances"]
+        assert instances == ["plate_0"]
+
+    def test_activate_returns_custom_name(self, custom_names_env):
+        """activate() returns the custom name."""
+        name = custom_names_env.registry.activate("cup", [0, 0, 0.5])
+        assert name == "cup_left"
+
+    def test_hide_custom_name(self, custom_names_env):
+        """hide() works with custom names."""
+        name = custom_names_env.registry.activate("cup", [0, 0, 0.5])
+        custom_names_env.registry.hide(name)
+        assert not custom_names_env.registry.is_active(name)
+
+    def test_update_custom_name(self, custom_names_env):
+        """update() works with custom names."""
+        name = custom_names_env.registry.activate("cup", [0, 0, 0.5])
+        custom_names_env.update([{"name": name, "pos": [0.1, 0.2, 0.3]}])
+        body_id = mujoco.mj_name2id(custom_names_env.model, mujoco.mjtObj.mjOBJ_BODY, name)
+        assert np.allclose(custom_names_env.data.xpos[body_id], [0.1, 0.2, 0.3], atol=1e-3)
+
+    def test_get_type(self, custom_names_env):
+        """get_type() returns correct type for custom and auto names."""
+        assert custom_names_env.registry.get_type("cup_left") == "cup"
+        assert custom_names_env.registry.get_type("cup_right") == "cup"
+        assert custom_names_env.registry.get_type("plate_0") == "plate"
+
+    def test_get_type_unknown_raises(self, custom_names_env):
+        """get_type() raises ObjectNotFoundError for unknown names."""
+        from mj_environment.exceptions import ObjectNotFoundError
+        with pytest.raises(ObjectNotFoundError):
+            custom_names_env.registry.get_type("nonexistent")
+
+    def test_parse_object_type_custom_name(self, custom_names_env):
+        """_parse_object_type() resolves custom names."""
+        assert custom_names_env.registry._parse_object_type("cup_left") == "cup"
+        assert custom_names_env.registry._parse_object_type("cup_right") == "cup"
+
+    def test_names_and_count_conflict(self, tmp_path):
+        """Specifying both names and count raises ConfigurationError."""
+        config = {
+            "objects": {
+                "cup": {"names": ["a", "b"], "count": 2},
+            }
+        }
+        config_path = str(tmp_path / "scene_config.yaml")
+        with open(config_path, "w") as f:
+            yaml.safe_dump(config, f)
+        with pytest.raises(ConfigurationError, match="both 'names' and 'count'"):
+            Environment(
+                base_scene_xml="data/scene.xml",
+                objects_dir="data/objects",
+                scene_config_yaml=config_path,
+            )
+
+    def test_duplicate_names_rejected(self, tmp_path):
+        """Duplicate names across types raise ConfigurationError."""
+        config = {
+            "objects": {
+                "cup": {"names": ["shared_name"]},
+                "plate": {"names": ["shared_name"]},
+            }
+        }
+        config_path = str(tmp_path / "scene_config.yaml")
+        with open(config_path, "w") as f:
+            yaml.safe_dump(config, f)
+        with pytest.raises(ConfigurationError, match="Duplicate instance name"):
+            Environment(
+                base_scene_xml="data/scene.xml",
+                objects_dir="data/objects",
+                scene_config_yaml=config_path,
+            )
