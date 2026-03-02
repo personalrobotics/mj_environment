@@ -111,12 +111,27 @@ with ThreadPoolExecutor() as executor:
 
 ### Perception Example
 
+Perception systems produce raw detections (`{type, pos}`) without instance identity. `ObjectTracker` maintains persistent instance names across frames using nearest-neighbor association:
+
 ```python
-# Fork for perception processing - sync back when done
+from mj_environment import Environment, ObjectTracker
+
+tracker = ObjectTracker(env.registry, max_distance=0.15)
+
+# Each perception frame:
+raw_detections = [
+    {"type": "cup", "pos": [0.1, 0.2, 0.4]},
+    {"type": "plate", "pos": [0.3, -0.1, 0.4]},
+]
+updates = tracker.associate(raw_detections)  # Assigns persistent instance names
+
+# Apply via fork/sync for safe updates
 with env.fork() as perception_fork:
-    perception_fork.update(filtered_detections, hide_unlisted=True)
+    perception_fork.update(updates, hide_unlisted=True)
     env.sync_from(perception_fork)
 ```
+
+`BaseTracker` provides an ABC for drop-in replacements (Kalman, Hungarian).
 
 ### Perception Aliases
 
@@ -191,7 +206,7 @@ Values in `meta.yaml` (mass, color, scale) override those in `model.xml`.
 
 ```bash
 ./run_demo.sh demos/dynamic_kitchen_demo.py      # Object activation and forking
-./run_demo.sh demos/perception_update_demo.py    # Perception with fork + sync_from
+./run_demo.sh demos/perception_update_demo.py    # ObjectTracker + alias resolution + fork/sync
 python demos/parallel_planning_demo.py           # Parallel planners with cancellation
 ```
 
@@ -235,6 +250,16 @@ Available exceptions:
 | `save_state(path)` | Serialize state to YAML |
 | `load_state(path)` | Restore state from YAML |
 | `get_object_metadata(name)` | Get object properties |
+
+### ObjectTracker
+
+| Method | Description |
+|--------|-------------|
+| `ObjectTracker(registry, max_distance=0.15)` | Create tracker with nearest-neighbor association |
+| `associate(detections)` | Map `{type, pos}` dicts to persistent `{name, pos, quat}` updates |
+| `reset()` | Clear all tracking state |
+
+Subclass `BaseTracker` to implement custom association (Kalman, Hungarian).
 
 ### ObjectRegistry
 
