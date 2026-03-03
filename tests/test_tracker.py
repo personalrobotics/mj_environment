@@ -116,7 +116,7 @@ class TestPoolExhaustion:
 
     def test_more_detections_than_instances(self, env, tracker):
         obj_type = next(iter(env.registry.objects))
-        pool_size = env.registry.objects[obj_type]["count"]
+        pool_size = len(env.registry.objects[obj_type]["instances"])
 
         # Detect more objects than the pool can hold
         detections = [
