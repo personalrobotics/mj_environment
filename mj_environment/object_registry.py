@@ -24,10 +24,6 @@ from .exceptions import (
 logger = logging.getLogger(__name__)
 
 
-# ---------------------------------------------------------------------------
-# Helpers (inlined from quaternion.py and mujoco_helpers.py)
-# ---------------------------------------------------------------------------
-
 def _normalize_quaternion(quat: Union[Sequence[float], np.ndarray]) -> np.ndarray:
     """Normalize a quaternion to unit length. Raises ValueError for near-zero input."""
     q = np.array(quat, dtype=float)
@@ -125,7 +121,6 @@ class ObjectRegistry:
         self.model = model
         self.data = data
         self.asset_manager = asset_manager
-        self.scene_cfg = scene_cfg
         self.hide_pos = np.array(hide_pos, dtype=float)
         self.objects: Dict[str, Dict[str, Any]] = {}
         self.active_objects: Dict[str, bool] = {}
@@ -135,7 +130,7 @@ class ObjectRegistry:
 
         self._hide_positions: Dict[str, np.ndarray] = {}
 
-        self._preload_objects()
+        self._preload_objects(scene_cfg)
         self._cache_geom_properties()
         self._compute_hide_grid()
         self._apply_hide_grid()
@@ -143,14 +138,14 @@ class ObjectRegistry:
     # ------------------------------------------------------------------
     # Object preloading
     # ------------------------------------------------------------------
-    def _preload_objects(self):
+    def _preload_objects(self, scene_cfg: Dict[str, Any]):
         """Track object instances that were preloaded into the MuJoCo model by Environment."""
-        for obj_type, entry in self.scene_cfg.items():
+        for obj_type, entry in scene_cfg.items():
             if obj_type not in self.asset_manager.list():
                 logger.warning("Unknown asset '%s', skipping preload", obj_type)
                 continue
 
-            names = entry.get("names", [f"{obj_type}_{i}" for i in range(entry.get("count", 1))])
+            names = entry["names"]  # normalized by Environment._load_scene_config
             self.objects[obj_type] = {"count": len(names), "instances": []}
 
             for name in names:
@@ -251,7 +246,6 @@ class ObjectRegistry:
         clone.active_objects = dict(self.active_objects)
         clone.geom_visibility = {k: v.copy() for k, v in self.geom_visibility.items()}
         clone.geom_collision = dict(self.geom_collision)  # Tuples are immutable, shallow copy OK
-        clone.scene_cfg = self.scene_cfg  # Read-only after init
 
         # Create new index cache (shared model, so indices are the same)
         clone._index_cache = _MujocoIndexCache(clone.model)
@@ -260,20 +254,20 @@ class ObjectRegistry:
 
     def _parse_object_type(self, instance_name: str) -> Optional[str]:
         """
-        Parse object type from instance name.
+        Resolve object type from an instance name.
 
-        Checks direct registry membership first (handles custom names),
-        then falls back to parsing the {type}_{index} pattern.
+        Tries direct registry lookup first via get_type(), then falls back
+        to parsing the {type}_{index} pattern for auto-activation in update().
 
         Examples:
             cup_0 -> cup
             kitchen_knife_2 -> kitchen_knife
             recycle_bin_right -> recycle_bin (if registered as custom name)
         """
-        # Direct lookup: handles custom names
-        for obj_type, info in self.objects.items():
-            if instance_name in info["instances"]:
-                return obj_type
+        try:
+            return self.get_type(instance_name)
+        except ObjectNotFoundError:
+            pass
         # Fallback: parse {type}_{index} pattern
         for obj_type in self.objects:
             if instance_name.startswith(obj_type + "_"):
