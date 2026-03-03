@@ -5,21 +5,22 @@ Manages object lifecycle (activation, hiding, movement) in MuJoCo.
 
 import logging
 import math
+from typing import Any, Dict, List, NamedTuple, Optional, Sequence, Union
 
 import mujoco
 import numpy as np
-from typing import Dict, List, Any, NamedTuple, Optional, Union, Sequence
+
+from .exceptions import (
+    ObjectTypeNotFoundError,
+    ObjectNotFoundError,
+    ObjectPoolExhaustedError,
+)
 
 # Project constants
 DEFAULT_HIDE_POSITION = [0, 0, -1]
 HIDE_GRID_SPACING = 0.5  # meters between hidden object parking spots
 IDENTITY_QUATERNION = np.array([1.0, 0.0, 0.0, 0.0], dtype=float)
 _QUAT_NORM_EPSILON = 1e-10
-from .exceptions import (
-    ObjectTypeNotFoundError,
-    ObjectNotFoundError,
-    ObjectPoolExhaustedError,
-)
 
 logger = logging.getLogger(__name__)
 
@@ -146,7 +147,7 @@ class ObjectRegistry:
                 continue
 
             names = entry["names"]  # normalized by Environment._load_scene_config
-            self.objects[obj_type] = {"count": len(names), "instances": []}
+            self.objects[obj_type] = {"instances": []}
 
             for name in names:
                 # Verify object exists in the model (it should be preloaded by Environment)
@@ -237,10 +238,7 @@ class ObjectRegistry:
 
         # Deep copy mutable state
         clone.objects = {
-            obj_type: {
-                "count": info["count"],
-                "instances": list(info["instances"])
-            }
+            obj_type: {"instances": list(info["instances"])}
             for obj_type, info in self.objects.items()
         }
         clone.active_objects = dict(self.active_objects)

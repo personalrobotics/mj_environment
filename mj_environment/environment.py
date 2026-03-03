@@ -91,8 +91,8 @@ class Environment:
         # ------------------------------------------------------------------
         # 1️⃣ Load scene config and determine if we have objects to manage
         # ------------------------------------------------------------------
-        self._scene_cfg = self._load_scene_config(objects_dir, scene_config_yaml)
-        self._has_objects = bool(self._scene_cfg)
+        scene_cfg = self._load_scene_config(objects_dir, scene_config_yaml)
+        self._has_objects = bool(scene_cfg)
 
         # ------------------------------------------------------------------
         # 2️⃣ Asset Manager: load YAML metadata + object XMLs (if objects exist)
@@ -105,7 +105,7 @@ class Environment:
         # ------------------------------------------------------------------
         # 3️⃣ Build in-memory XML string for the complete scene + assets dict for meshes
         # ------------------------------------------------------------------
-        xml_string, assets_dict = self._build_scene_xml_string(base_scene_xml)
+        xml_string, assets_dict = self._build_scene_xml_string(base_scene_xml, scene_cfg)
 
         # ------------------------------------------------------------------
         # 4️⃣ Create MuJoCo model + data directly from XML string (with assets dict for mesh files)
@@ -122,14 +122,14 @@ class Environment:
         #    These take priority over values in XML files
         # ------------------------------------------------------------------
         if self._has_objects:
-            self._apply_metadata_overrides()
+            self._apply_metadata_overrides(scene_cfg)
 
         # ------------------------------------------------------------------
         # 6️⃣ Initialize Object Registry
         # ------------------------------------------------------------------
         if self._has_objects:
             self.registry: Optional[ObjectRegistry] = ObjectRegistry(
-                self.model, self.data, self.asset_manager, self._scene_cfg, hide_pos
+                self.model, self.data, self.asset_manager, scene_cfg, hide_pos
             )
         else:
             self.registry = None
@@ -188,11 +188,11 @@ class Environment:
     # ======================================================================
     # Internal: Scene Composition
     # ======================================================================
-    def _build_scene_xml_string(self, base_scene_xml: str) -> tuple[str, dict[str, bytes]]:
+    def _build_scene_xml_string(self, base_scene_xml: str, scene_cfg: Dict[str, Any]) -> tuple[str, dict[str, bytes]]:
         """
         Build a MuJoCo scene XML in memory by combining:
         - the base scene (e.g., table, lights, cameras)
-        - all object instances from self._scene_cfg
+        - all object instances from scene_cfg
 
         Returns:
             Tuple of (xml_string, assets_dict) where assets_dict contains mesh files for assets
@@ -216,7 +216,7 @@ class Environment:
             return minidom.parseString(xml_bytes).toprettyxml(indent="  "), assets_dict
 
         # Parse object XMLs once and cache them
-        parsed_objects = self._parse_object_xmls()
+        parsed_objects = self._parse_object_xmls(scene_cfg)
 
         # Collect assets and mesh files from object XMLs
         asset_el = SubElement(mujoco_el, "asset")
@@ -229,16 +229,16 @@ class Environment:
         xml_bytes = tostring(mujoco_el, "utf-8")
         return minidom.parseString(xml_bytes).toprettyxml(indent="  "), assets_dict
 
-    def _parse_object_xmls(self) -> Dict[str, Dict[str, Any]]:
+    def _parse_object_xmls(self, scene_cfg: Dict[str, Any]) -> Dict[str, Dict[str, Any]]:
         """
         Parse all object XMLs once and return cached data.
 
         Returns:
-            Dict mapping obj_type to {xml_path, root, count, names} for each valid object
+            Dict mapping obj_type to {xml_path, root, names} for each valid object
         """
         parsed = {}
 
-        for obj_type, entry in self._scene_cfg.items():
+        for obj_type, entry in scene_cfg.items():
             if self.asset_manager is None or obj_type not in self.asset_manager.list():
                 logger.warning("Unknown asset '%s', skipping", obj_type)
                 continue
@@ -367,13 +367,12 @@ class Environment:
     # ------------------------------------------------------------------
     # Metadata Overrides
     # ------------------------------------------------------------------
-    def _apply_metadata_overrides(self) -> None:
+    def _apply_metadata_overrides(self, scene_cfg: Dict[str, Any]) -> None:
         """Apply mass, color, and scale overrides from meta.yaml to the model.
 
         These overrides take priority over values specified in the XML files.
-        Uses self._scene_cfg loaded during __init__.
         """
-        for obj_type, entry in self._scene_cfg.items():
+        for obj_type, entry in scene_cfg.items():
             if obj_type not in self.asset_manager.list():
                 continue
             
