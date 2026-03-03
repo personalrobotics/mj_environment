@@ -169,7 +169,21 @@ class Environment:
         with open(scene_config_yaml, "r") as f:
             cfg = yaml.safe_load(f) or {}
 
-        return cfg.get("objects", {})
+        objects = cfg.get("objects", {})
+
+        # Normalize: ensure every entry has a 'names' key
+        for obj_type, entry in objects.items():
+            custom_names = entry.get("names")
+            count = entry.get("count")
+            if custom_names is not None and count is not None:
+                raise ConfigurationError(
+                    f"Object type '{obj_type}' specifies both 'names' and 'count'",
+                    hint="Use 'names' for custom instance names, or 'count' for auto-generated names, not both.",
+                )
+            if custom_names is None:
+                entry["names"] = [f"{obj_type}_{i}" for i in range(count if count is not None else 1)]
+
+        return objects
 
     # ======================================================================
     # Internal: Scene Composition
@@ -238,25 +252,12 @@ class Environment:
                 logger.warning("XML file not found for '%s' at %s, skipping", obj_type, xml_path)
                 continue
 
-            # Resolve instance names: explicit names list or auto-generated
-            custom_names = entry.get("names")
-            count = entry.get("count")
-            if custom_names is not None and count is not None:
-                raise ConfigurationError(
-                    f"Object type '{obj_type}' specifies both 'names' and 'count'",
-                    hint="Use 'names' for custom instance names, or 'count' for auto-generated names, not both.",
-                )
-            if custom_names is not None:
-                names = list(custom_names)
-            else:
-                n = count if count is not None else 1
-                names = [f"{obj_type}_{i}" for i in range(n)]
+            names = entry["names"]  # normalized by _load_scene_config
 
             obj_tree = ETparse(xml_path)
             parsed[obj_type] = {
                 'xml_path': xml_path,
                 'root': obj_tree.getroot(),
-                'count': len(names),
                 'names': names,
             }
 
@@ -289,7 +290,7 @@ class Environment:
         """
         included_assets: set = set()
 
-        for obj_type, obj_data in parsed_objects.items():
+        for obj_data in parsed_objects.values():
             obj_asset = obj_data['root'].find("asset")
             if obj_asset is None:
                 continue
@@ -350,7 +351,7 @@ class Environment:
             parsed_objects: Dict from _parse_object_xmls()
             worldbody_el: The <worldbody> element to add bodies to
         """
-        for _, obj_data in parsed_objects.items():
+        for obj_data in parsed_objects.values():
             obj_worldbody = obj_data['root'].find("worldbody")
             if obj_worldbody is None:
                 logger.warning("No worldbody found in %s, skipping", obj_data['xml_path'])
@@ -378,7 +379,7 @@ class Environment:
             
             # Get metadata from AssetManager
             meta = self.asset_manager.get(obj_type)
-            names = entry.get("names", [f"{obj_type}_{i}" for i in range(entry.get("count", 1))])
+            names = entry["names"]  # normalized by _load_scene_config
 
             # Apply overrides to all instances of this object type
             for instance_name in names:
@@ -442,19 +443,8 @@ class Environment:
         if self.registry is None or self.asset_manager is None:
             raise ObjectNotFoundError(instance_name, [])
 
-        # Find object type by looking up instance_name in the registry
-        # This handles cases where object type names have underscores (e.g., "kitchen_knife")
-        for registered_type, obj_info in self.registry.objects.items():
-            if instance_name in obj_info["instances"]:
-                return self.asset_manager.get(registered_type)
-
-        # Fallback: use registry's parsing logic for edge cases
-        parsed_type = self.registry._parse_object_type(instance_name)
-        if parsed_type is not None and parsed_type in self.asset_manager.list():
-            return self.asset_manager.get(parsed_type)
-
-        all_instances = list(self.registry.active_objects.keys())
-        raise ObjectNotFoundError(instance_name, all_instances)
+        obj_type = self.registry.get_type(instance_name)  # raises ObjectNotFoundError
+        return self.asset_manager.get(obj_type)
     
     def update(
         self,
@@ -577,17 +567,11 @@ class Environment:
                 hint="Check for physics explosions or invalid object velocities.",
             )
 
-        active_objects = self.registry.active_objects if self.registry else {}
-        if isinstance(active_objects, dict):
-            active_dict = active_objects
-        else:
-            active_dict = {name: True for name in active_objects}
-
         state = {
             "schema_version": 1,
             "qpos": self.data.qpos.tolist(),
             "qvel": self.data.qvel.tolist(),
-            "active_objects": active_dict,
+            "active_objects": dict(self.registry.active_objects) if self.registry else {},
         }
         try:
             with open(path, "w") as f:
@@ -629,12 +613,13 @@ class Environment:
                 hint="The state file was saved from a different model configuration.",
             )
 
-        # Parse active_objects BEFORE modifying state to avoid corruption on error
-        active_list = state.get("active_objects", [])
-        if isinstance(active_list, dict):
-            active_objects = active_list
-        else:
-            active_objects = {name: True for name in active_list}
+        # Parse and validate active_objects BEFORE modifying state
+        active_objects = state.get("active_objects", {})
+        if not isinstance(active_objects, dict):
+            raise StateError(
+                f"Invalid active_objects: expected dict, got {type(active_objects).__name__}",
+                hint="The state file may be corrupted.",
+            )
 
         # All validation passed — apply state
         self.data.qpos[:] = qpos
