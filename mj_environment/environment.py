@@ -103,14 +103,22 @@ class Environment:
             self.asset_manager = None
 
         # ------------------------------------------------------------------
-        # 3️⃣ Build in-memory XML string for the complete scene + assets dict for meshes
+        # 3️⃣ Build scene and create MuJoCo model + data
         # ------------------------------------------------------------------
-        xml_string, assets_dict = self._build_scene_xml_string(base_scene_xml, scene_cfg)
-
-        # ------------------------------------------------------------------
-        # 4️⃣ Create MuJoCo model + data directly from XML string (with assets dict for mesh files)
-        # ------------------------------------------------------------------
-        self.model = mujoco.MjModel.from_xml_string(xml_string, assets=assets_dict)
+        if self._has_objects:
+            # Compose scene XML in memory (base + object instances)
+            xml_string, assets_dict = self._build_scene_xml_string(base_scene_xml, scene_cfg)
+            self.model = mujoco.MjModel.from_xml_string(xml_string, assets=assets_dict)
+        else:
+            # Robot-only scene: load directly so relative paths (meshdir,
+            # texturedir, includes) resolve from the XML file's directory.
+            if not os.path.exists(base_scene_xml):
+                raise ConfigurationError(
+                    f"Base scene XML not found: {base_scene_xml}",
+                    hint="Check that the path is correct and the file exists.",
+                )
+            assets_dict = {}
+            self.model = mujoco.MjModel.from_xml_path(os.path.abspath(base_scene_xml))
         self.data = mujoco.MjData(self.model)
         self.assets = assets_dict  # Store assets dict for forking
 
