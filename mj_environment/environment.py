@@ -145,6 +145,38 @@ class Environment:
         object_count = len(self.registry.objects) if self.registry else 0
         logger.info("Loaded scene with %d object types", object_count)
 
+    @classmethod
+    def from_model(
+        cls,
+        model: mujoco.MjModel,
+        data: Optional[mujoco.MjData] = None,
+    ) -> "Environment":
+        """Create an Environment from a pre-compiled MuJoCo model.
+
+        Use this when the scene was composed programmatically via ``mujoco.MjSpec``
+        (e.g. attaching a gripper, adding an EE site, attaching prl_assets objects).
+        Object lifecycle management (``registry``, ``asset_manager``, ``update()``)
+        is not available; position objects directly via ``data.qpos``.
+
+        Args:
+            model: Compiled MjModel.
+            data:  MjData for ``model``; created automatically if not provided.
+
+        Returns:
+            Environment wrapping the given model.
+        """
+        env = cls.__new__(cls)
+        env.hide_pos = list(DEFAULT_HIDE_POSITION)
+        env._has_objects = False
+        env.asset_manager = None
+        env.registry = None
+        env.assets = {}
+        env._geom_original_size = {}
+        env.model = model
+        env.data = data if data is not None else mujoco.MjData(model)
+        logger.info("Loaded scene from pre-compiled model (%d bodies)", model.nbody)
+        return env
+
     def _load_scene_config(
         self, objects_dir: Optional[str], scene_config_yaml: Optional[str]
     ) -> Dict[str, Any]:
