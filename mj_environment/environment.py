@@ -515,6 +515,53 @@ class Environment:
         self.registry.update(object_list, hide_unlisted=hide_unlisted)  # type: ignore[arg-type]
         mujoco.mj_forward(self.model, self.data)
 
+    def get_body_pose(self, body_name: str) -> np.ndarray:
+        """Return the 4×4 world pose of a named body.
+
+        Works with any body in the model, including objects attached via
+        ``MjSpec`` (e.g. ``"can_0/can"``) and registry-managed objects.
+
+        Args:
+            body_name: MuJoCo body name.
+
+        Returns:
+            4×4 homogeneous transform (rotation + translation).
+
+        Raises:
+            ValueError: If body_name is not found in the model.
+        """
+        body_id = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_BODY, body_name)
+        if body_id == -1:
+            raise ValueError(f"Body '{body_name}' not found in model")
+        T = np.eye(4)
+        T[:3, :3] = self.data.xmat[body_id].reshape(3, 3)
+        T[:3, 3] = self.data.xpos[body_id]
+        return T
+
+    def hide_freebody(self, body_name: str) -> None:
+        """Move a free-joint body underground so it neither collides nor renders.
+
+        Designed for objects placed via ``MjSpec.attach_body()`` that have a
+        freejoint (the standard prl_assets convention).  For registry-managed
+        objects, prefer ``env.registry.hide(name)`` instead.
+
+        Args:
+            body_name: MuJoCo body name (e.g. ``"can_0/can"``).
+
+        Raises:
+            ValueError: If the body is not found or does not have a freejoint.
+        """
+        body_id = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_BODY, body_name)
+        if body_id == -1:
+            raise ValueError(f"Body '{body_name}' not found in model")
+        joint_id = self.model.body_jntadr[body_id]
+        if joint_id == -1 or self.model.jnt_type[joint_id] != mujoco.mjtJoint.mjJNT_FREE:
+            raise ValueError(f"Body '{body_name}' does not have a freejoint")
+        qpos_adr = self.model.jnt_qposadr[joint_id]
+        self.data.qpos[qpos_adr : qpos_adr + 3] = self.hide_pos
+        self.data.qpos[qpos_adr + 3 : qpos_adr + 7] = [1, 0, 0, 0]
+        mujoco.mj_forward(self.model, self.data)
+
     def step(self, ctrl: Optional[np.ndarray] = None) -> None:
         """Advance simulation by one step."""
         if ctrl is not None:
