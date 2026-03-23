@@ -345,36 +345,42 @@ class Environment:
                 included_assets.add(asset_key)
 
                 if asset_child.tag == "mesh":
-                    self._load_mesh_file(obj_data['xml_path'], asset_child, assets_dict)
+                    self._load_asset_file(obj_data['xml_path'], asset_child, "file", assets_dict)
+                elif asset_child.tag == "texture":
+                    self._load_asset_file(obj_data['xml_path'], asset_child, "file", assets_dict)
 
-    def _load_mesh_file(
+    def _load_asset_file(
         self,
         xml_path: str,
-        mesh_element: Element,
+        element: Element,
+        file_attr: str,
         assets_dict: dict[str, bytes],
     ) -> None:
         """
-        Load a mesh file into the assets dictionary.
+        Load an asset file (mesh, texture, etc.) into the assets dictionary.
 
         Args:
-            xml_path: Path to the object XML (used to resolve relative mesh paths)
-            mesh_element: The <mesh> XML element containing the file attribute
-            assets_dict: Dictionary to populate with mesh file data
+            xml_path: Path to the object XML (used to resolve relative paths)
+            element: The XML element containing the file attribute
+            file_attr: Name of the attribute holding the filename (e.g., "file")
+            assets_dict: Dictionary to populate with file data
         """
-        mesh_file = mesh_element.get("file")
-        if not mesh_file:
+        filename = element.get(file_attr)
+        if not filename:
+            return
+        if filename in assets_dict:
             return
 
         obj_dir = os.path.dirname(xml_path)
-        mesh_path = os.path.join(obj_dir, mesh_file)
+        file_path = os.path.join(obj_dir, filename)
 
-        if not os.path.exists(mesh_path):
+        if not os.path.exists(file_path):
             raise ConfigurationError(
-                f"Mesh file not found: {mesh_path}",
-                hint=f"Check that mesh files exist relative to {os.path.dirname(xml_path)}",
+                f"Asset file not found: {file_path}",
+                hint=f"Check that files exist relative to {os.path.dirname(xml_path)}",
             )
-        with open(mesh_path, 'rb') as f:
-            assets_dict[mesh_file] = f.read()
+        with open(file_path, 'rb') as f:
+            assets_dict[filename] = f.read()
 
     def _add_object_instances(
         self,
