@@ -1,5 +1,7 @@
 """High-level MuJoCo environment orchestrator."""
 
+from __future__ import annotations
+
 # Standard library
 import logging
 import os
@@ -79,6 +81,12 @@ class Environment:
       - Provide forking, updating, and serialization
     """
 
+    model: mujoco.MjModel
+    data: mujoco.MjData
+    assets: dict[str, bytes]
+    asset_manager: Optional[AssetManager]
+    registry: Optional[ObjectRegistry]
+
     def __init__(
         self,
         base_scene_xml: str,
@@ -86,7 +94,7 @@ class Environment:
         scene_config_yaml: Optional[str] = None,
         hide_pos: List[float] = DEFAULT_HIDE_POSITION,
     ):
-        self.hide_pos = hide_pos
+        self.hide_pos: list[float] = hide_pos
 
         # ------------------------------------------------------------------
         # 1️⃣ Load scene config and determine if we have objects to manage
@@ -108,7 +116,7 @@ class Environment:
         if self._has_objects:
             # Compose scene XML in memory (base + object instances)
             xml_string, assets_dict = self._build_scene_xml_string(base_scene_xml, scene_cfg)
-            self.model = mujoco.MjModel.from_xml_string(xml_string, assets=assets_dict)
+            self.model: mujoco.MjModel = mujoco.MjModel.from_xml_string(xml_string, assets=assets_dict)
         else:
             # Robot-only scene: load directly so relative paths (meshdir,
             # texturedir, includes) resolve from the XML file's directory.
@@ -119,8 +127,8 @@ class Environment:
                 )
             assets_dict = {}
             self.model = mujoco.MjModel.from_xml_path(os.path.abspath(base_scene_xml))
-        self.data = mujoco.MjData(self.model)
-        self.assets = assets_dict  # Store assets dict for forking
+        self.data: mujoco.MjData = mujoco.MjData(self.model)
+        self.assets: dict[str, bytes] = assets_dict  # Store assets dict for forking
 
         # Cache for original geom sizes (before scale overrides are applied)
         self._geom_original_size: Dict[int, np.ndarray] = {}
