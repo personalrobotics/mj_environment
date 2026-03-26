@@ -3,6 +3,8 @@ object_registry.py
 Manages object lifecycle (activation, hiding, movement) in MuJoCo.
 """
 
+from __future__ import annotations
+
 import logging
 import math
 from typing import Any, Dict, List, NamedTuple, Optional, Sequence, Union
@@ -119,8 +121,8 @@ class ObjectRegistry:
             scene_cfg: Objects dict from scene_config.yaml (already loaded by Environment)
             hide_pos: Position for hidden objects
         """
-        self.model = model
-        self.data = data
+        self.model: mujoco.MjModel = model
+        self.data: mujoco.MjData = data
         self.asset_manager = asset_manager
         self.hide_pos = np.array(hide_pos, dtype=float)
         self.objects: Dict[str, Dict[str, Any]] = {}
@@ -345,7 +347,7 @@ class ObjectRegistry:
         logger.debug("Activated %s", name)
         return name
 
-    def hide(self, name: str):
+    def hide(self, name: str) -> None:
         """Hide an active object by moving and disabling it."""
         if name not in self.active_objects:
             raise ObjectNotFoundError(name, list(self.active_objects.keys()))
