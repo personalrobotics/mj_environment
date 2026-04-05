@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2025 Siddhartha Srinivasa
+
 """
 Tests for Environment.fork() API.
 
@@ -9,10 +12,12 @@ Tests cover:
 - Parallel execution scenarios
 """
 
-import pytest
-import numpy as np
-import mujoco
 from concurrent.futures import ThreadPoolExecutor
+
+import mujoco
+import numpy as np
+import pytest
+
 from mj_environment import Environment
 
 
@@ -185,9 +190,7 @@ class TestForkFunctionality:
         fork = env.fork()
         obj_type = next(iter(fork.registry.objects))
 
-        fork.update([
-            {"name": f"{obj_type}_0", "pos": [0.1, 0.2, 0.3], "quat": [1, 0, 0, 0]}
-        ])
+        fork.update([{"name": f"{obj_type}_0", "pos": [0.1, 0.2, 0.3], "quat": [1, 0, 0, 0]}])
 
         body_id = mujoco.mj_name2id(fork.model, mujoco.mjtObj.mjOBJ_BODY, f"{obj_type}_0")
         assert np.allclose(fork.data.xpos[body_id], [0.1, 0.2, 0.3], atol=0.01)
@@ -228,17 +231,14 @@ class TestForkParallelExecution:
 
         def simulate_planner(fork, seed):
             """Simulate a planner stepping the simulation."""
-            rng = np.random.default_rng(seed)
+            np.random.default_rng(seed)
             for _ in range(50):
                 fork.step()
             return fork.data.time
 
         # Run planners in parallel
         with ThreadPoolExecutor(max_workers=4) as executor:
-            futures = [
-                executor.submit(simulate_planner, fork, i)
-                for i, fork in enumerate(forks)
-            ]
+            futures = [executor.submit(simulate_planner, fork, i) for i, fork in enumerate(forks)]
             results = [f.result() for f in futures]
 
         # All forks should have advanced simulation time
@@ -254,17 +254,12 @@ class TestForkParallelExecution:
         def update_fork(fork, idx):
             """Update object position in a fork."""
             pos = [0.1 * idx, 0.2 * idx, 0.5]
-            fork.update([
-                {"name": f"{obj_type}_0", "pos": pos, "quat": [1, 0, 0, 0]}
-            ])
+            fork.update([{"name": f"{obj_type}_0", "pos": pos, "quat": [1, 0, 0, 0]}])
             body_id = mujoco.mj_name2id(fork.model, mujoco.mjtObj.mjOBJ_BODY, f"{obj_type}_0")
             return fork.data.xpos[body_id].copy()
 
         with ThreadPoolExecutor(max_workers=4) as executor:
-            futures = [
-                executor.submit(update_fork, fork, i)
-                for i, fork in enumerate(forks)
-            ]
+            futures = [executor.submit(update_fork, fork, i) for i, fork in enumerate(forks)]
             positions = [f.result() for f in futures]
 
         # Each fork should have different position

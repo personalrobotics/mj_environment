@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2025 Siddhartha Srinivasa
+
 """High-level MuJoCo environment orchestrator."""
 
 from __future__ import annotations
@@ -5,14 +8,20 @@ from __future__ import annotations
 # Standard library
 import logging
 import os
-from typing import List, Dict, Any, Optional
+from typing import Any, Dict, List, Optional
 from xml.dom import minidom
-from xml.etree.ElementTree import Element, SubElement, tostring, parse as ETparse
+from xml.etree.ElementTree import Element, SubElement, tostring
+from xml.etree.ElementTree import parse as ETparse
 
 # Third-party
 import mujoco
 import numpy as np
 import yaml
+from asset_manager import AssetManager
+
+# Local
+from .exceptions import ConfigurationError, ObjectNotFoundError, StateError
+from .object_registry import DEFAULT_HIDE_POSITION, ObjectRegistry
 
 logger = logging.getLogger(__name__)
 
@@ -60,14 +69,6 @@ def _prefix_names_in_subtree(elem: Element, prefix: str) -> None:
             continue
         if "name" in child.attrib:
             child.set("name", f"{prefix}/{child.attrib['name']}")
-
-# Third-party (external package)
-from asset_manager import AssetManager
-
-# Local
-from .object_registry import DEFAULT_HIDE_POSITION
-from .exceptions import ConfigurationError, ObjectNotFoundError, StateError
-from .object_registry import ObjectRegistry
 
 
 class Environment:
@@ -185,9 +186,7 @@ class Environment:
         logger.info("Loaded scene from pre-compiled model (%d bodies)", model.nbody)
         return env
 
-    def _load_scene_config(
-        self, objects_dir: Optional[str], scene_config_yaml: Optional[str]
-    ) -> Dict[str, Any]:
+    def _load_scene_config(self, objects_dir: Optional[str], scene_config_yaml: Optional[str]) -> Dict[str, Any]:
         """Load and validate scene configuration.
 
         Returns the objects dict from scene_config.yaml, or empty dict for robot-only scenes.
@@ -203,7 +202,7 @@ class Environment:
             missing = "scene_config_yaml" if objects_dir else "objects_dir"
             raise ConfigurationError(
                 f"{provided} was provided without {missing}",
-                hint=f"Provide both objects_dir and scene_config_yaml, or neither (robot-only).",
+                hint="Provide both objects_dir and scene_config_yaml, or neither (robot-only).",
             )
 
         # Config file provided - must exist
@@ -211,7 +210,7 @@ class Environment:
             raise ConfigurationError(
                 f"Scene config not found: {scene_config_yaml}",
                 path=scene_config_yaml,
-                hint="Ensure the scene_config.yaml file exists at the specified path."
+                hint="Ensure the scene_config.yaml file exists at the specified path.",
             )
 
         with open(scene_config_yaml, "r") as f:
@@ -304,15 +303,15 @@ class Environment:
 
             obj_tree = ETparse(xml_path)
             parsed[obj_type] = {
-                'xml_path': xml_path,
-                'root': obj_tree.getroot(),
-                'names': names,
+                "xml_path": xml_path,
+                "root": obj_tree.getroot(),
+                "names": names,
             }
 
         # Validate no duplicate names across all types
         all_names: List[str] = []
         for obj_data in parsed.values():
-            for name in obj_data['names']:
+            for name in obj_data["names"]:
                 if name in all_names:
                     raise ConfigurationError(
                         f"Duplicate instance name '{name}' in scene config",
@@ -339,7 +338,7 @@ class Environment:
         included_assets: set = set()
 
         for obj_data in parsed_objects.values():
-            obj_asset = obj_data['root'].find("asset")
+            obj_asset = obj_data["root"].find("asset")
             if obj_asset is None:
                 continue
 
@@ -353,9 +352,9 @@ class Environment:
                 included_assets.add(asset_key)
 
                 if asset_child.tag == "mesh":
-                    self._load_asset_file(obj_data['xml_path'], asset_child, "file", assets_dict)
+                    self._load_asset_file(obj_data["xml_path"], asset_child, "file", assets_dict)
                 elif asset_child.tag == "texture":
-                    self._load_asset_file(obj_data['xml_path'], asset_child, "file", assets_dict)
+                    self._load_asset_file(obj_data["xml_path"], asset_child, "file", assets_dict)
 
     def _load_asset_file(
         self,
@@ -387,7 +386,7 @@ class Environment:
                 f"Asset file not found: {file_path}",
                 hint=f"Check that files exist relative to {os.path.dirname(xml_path)}",
             )
-        with open(file_path, 'rb') as f:
+        with open(file_path, "rb") as f:
             assets_dict[filename] = f.read()
 
     def _add_object_instances(
@@ -406,12 +405,12 @@ class Environment:
             worldbody_el: The <worldbody> element to add bodies to
         """
         for obj_data in parsed_objects.values():
-            obj_worldbody = obj_data['root'].find("worldbody")
+            obj_worldbody = obj_data["root"].find("worldbody")
             if obj_worldbody is None:
-                logger.warning("No worldbody found in %s, skipping", obj_data['xml_path'])
+                logger.warning("No worldbody found in %s, skipping", obj_data["xml_path"])
                 continue
 
-            for instance_name in obj_data['names']:
+            for instance_name in obj_data["names"]:
                 for obj_body in obj_worldbody.findall("body"):
                     new_body = _deep_copy_element(obj_body, worldbody_el)
                     new_body.set("name", instance_name)
@@ -429,7 +428,7 @@ class Environment:
         for obj_type, entry in scene_cfg.items():
             if obj_type not in self.asset_manager.list():
                 continue
-            
+
             # Get metadata from AssetManager
             meta = self.asset_manager.get(obj_type)
             names = entry["names"]  # normalized by _load_scene_config
@@ -439,7 +438,7 @@ class Environment:
                 body_id = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_BODY, instance_name)
                 if body_id == -1:
                     continue
-                
+
                 # Apply mass override
                 if "mass" in meta:
                     mass_value = float(meta["mass"])
@@ -498,7 +497,7 @@ class Environment:
 
         obj_type = self.registry.get_type(instance_name)  # raises ObjectNotFoundError
         return self.asset_manager.get(obj_type)
-    
+
     def update(
         self,
         object_list: List[Dict[str, Any]],
@@ -626,8 +625,8 @@ class Environment:
         for name, is_active in self.registry.active_objects.items():
             if is_active or include_inactive:
                 indices = self.registry._index_cache.get_body_indices(name)
-                pos = self.data.qpos[indices.qpos_adr:indices.qpos_adr+3].tolist()
-                quat = self.data.qpos[indices.qpos_adr+3:indices.qpos_adr+3+4].tolist()
+                pos = self.data.qpos[indices.qpos_adr : indices.qpos_adr + 3].tolist()
+                quat = self.data.qpos[indices.qpos_adr + 3 : indices.qpos_adr + 3 + 4].tolist()
                 active_objects[name] = {
                     "pos": pos,
                     "quat": quat,
@@ -709,7 +708,8 @@ class Environment:
 
         if len(qpos) != self.model.nq or len(qvel) != self.model.nv:
             raise StateError(
-                f"State dimensions mismatch: qpos={len(qpos)} (expected {self.model.nq}), qvel={len(qvel)} (expected {self.model.nv})",
+                f"State dimensions mismatch: qpos={len(qpos)} (expected {self.model.nq}), "
+                f"qvel={len(qvel)} (expected {self.model.nv})",
                 hint="The state file was saved from a different model configuration.",
             )
 
@@ -733,7 +733,7 @@ class Environment:
     # ------------------------------------------------------------------
     # Forking for Planning
     # ------------------------------------------------------------------
-    def fork(self) -> 'Environment':
+    def fork(self) -> "Environment":
         """
         Create a functional clone with independent state for planning.
 
@@ -758,7 +758,7 @@ class Environment:
         """
         return self._create_fork()
 
-    def fork_many(self, n: int) -> List['Environment']:
+    def fork_many(self, n: int) -> List["Environment"]:
         """
         Create multiple functional clones for parallel planning.
 
@@ -779,7 +779,7 @@ class Environment:
         """
         return [self._create_fork() for _ in range(n)]
 
-    def _create_fork(self) -> 'Environment':
+    def _create_fork(self) -> "Environment":
         """Create a single forked environment."""
         fork = Environment.__new__(Environment)
 
@@ -797,7 +797,7 @@ class Environment:
 
         return fork
 
-    def sync_from(self, other: 'Environment') -> None:
+    def sync_from(self, other: "Environment") -> None:
         """
         Synchronize this environment's state from another environment.
 
@@ -847,7 +847,7 @@ class Environment:
     # ------------------------------------------------------------------
     # Context Manager Support
     # ------------------------------------------------------------------
-    def __enter__(self) -> 'Environment':
+    def __enter__(self) -> "Environment":
         """Enter context manager. Returns self for use in with statements."""
         return self
 

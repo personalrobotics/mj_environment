@@ -1,4 +1,8 @@
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2025 Siddhartha Srinivasa
+
 from asset_manager import AssetManager
+
 
 def test_assets_load_correctly():
     am = AssetManager(base_dir="data/objects")

@@ -1,5 +1,10 @@
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2025 Siddhartha Srinivasa
+
 import pytest
+
 from mj_environment.environment import Environment
+
 
 @pytest.fixture
 def env():
@@ -8,6 +13,7 @@ def env():
         objects_dir="data/objects",
         scene_config_yaml="data/scene_config.yaml",
     )
+
 
 def test_environment_loads(env):
     assert env.model is not None
@@ -152,6 +158,7 @@ class TestRobotOnlyScene:
 
         # Verify file was created and has expected structure
         import yaml
+
         with open(state_file) as f:
             state = yaml.safe_load(f)
         assert "schema_version" in state

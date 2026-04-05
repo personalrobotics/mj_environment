@@ -1,12 +1,16 @@
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2025 Siddhartha Srinivasa
+
 """
 Tests for state preservation via fork().
 
 Previously tested clone_data/update_from_clone which are now replaced by fork().
 """
 
-import pytest
-import numpy as np
 import mujoco
+import numpy as np
+import pytest
+
 from mj_environment import Environment
 
 

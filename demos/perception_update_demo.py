@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2025 Siddhartha Srinivasa
+
 """
 Perception Update Demo
 ======================
@@ -15,11 +18,13 @@ Key features:
 - Fork/sync pattern: process detections in a fork, then sync_from() to commit
 """
 
+import time
+from typing import Any, Dict, List
+
 import mujoco
 import mujoco.viewer
 import numpy as np
-import time
-from typing import Dict, List, Any
+
 from mj_environment import Environment, ObjectTracker
 
 
@@ -130,9 +135,7 @@ def perception_update_demo():
             raw_detections: List[Dict[str, Any]] = []
             print(f"\n[t={data.time:.1f}s] Detection round:")
             for module_name, aliases in aliases_by_module.items():
-                raw_detections.extend(
-                    simulate_detections(module_name, aliases, env.asset_manager, z_center, rng)
-                )
+                raw_detections.extend(simulate_detections(module_name, aliases, env.asset_manager, z_center, rng))
 
             # 2. Tracker assigns persistent instance names
             updates = tracker.associate(raw_detections)

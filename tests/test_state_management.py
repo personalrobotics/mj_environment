@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2025 Siddhartha Srinivasa
+
 """
 Tests for state management fixes (Issue #8).
 
@@ -6,11 +9,10 @@ Tests cover:
 2. Scale caching to prevent compounding
 """
 
-import pytest
-import numpy as np
 import mujoco
-import tempfile
-import os
+import numpy as np
+import pytest
+
 from mj_environment.environment import Environment
 
 
@@ -29,22 +31,22 @@ class TestHideUnlistedDefault:
     def test_hide_unlisted_defaults_to_true(self, env):
         """Test that update() defaults to hide_unlisted=True (objects disappear if not in update)."""
         obj_type = next(iter(env.registry.objects))
-        instances = env.registry.objects[obj_type]["instances"]
+        env.registry.objects[obj_type]["instances"]
 
         # Activate two objects
         name1 = env.registry.activate(obj_type, [0.1, 0.1, 0.3])
         name2 = env.registry.activate(obj_type, [0.2, 0.2, 0.3])
         mujoco.mj_forward(env.model, env.data)
 
-        assert env.registry.active_objects[name1] == True
-        assert env.registry.active_objects[name2] == True
+        assert env.registry.active_objects[name1]
+        assert env.registry.active_objects[name2]
 
         # Update with only one object (default hide_unlisted=True should hide the other)
         env.update([{"name": name1, "pos": [0.1, 0.1, 0.3], "quat": [1, 0, 0, 0]}])
 
         # name1 should still be active, name2 should be hidden
-        assert env.registry.active_objects[name1] == True
-        assert env.registry.active_objects[name2] == False
+        assert env.registry.active_objects[name1]
+        assert not env.registry.active_objects[name2]
 
     def test_hide_unlisted_false_keeps_objects(self, env):
         """Test that hide_unlisted=False keeps objects not in update list."""
@@ -59,8 +61,8 @@ class TestHideUnlistedDefault:
         env.update([{"name": name1, "pos": [0.1, 0.1, 0.3], "quat": [1, 0, 0, 0]}], hide_unlisted=False)
 
         # Both should still be active
-        assert env.registry.active_objects[name1] == True
-        assert env.registry.active_objects[name2] == True
+        assert env.registry.active_objects[name1]
+        assert env.registry.active_objects[name2]
 
     def test_empty_update_hides_all(self, env):
         """Test that empty update with default hide_unlisted=True hides all objects."""
@@ -69,13 +71,13 @@ class TestHideUnlistedDefault:
         # Activate an object
         name = env.registry.activate(obj_type, [0.1, 0.1, 0.3])
         mujoco.mj_forward(env.model, env.data)
-        assert env.registry.active_objects[name] == True
+        assert env.registry.active_objects[name]
 
         # Empty update with default hide_unlisted=True
         env.update([])
 
         # Object should be hidden
-        assert env.registry.active_objects[name] == False
+        assert not env.registry.active_objects[name]
 
     def test_empty_update_with_hide_unlisted_false_keeps_all(self, env):
         """Test that empty update with hide_unlisted=False keeps all objects."""
@@ -84,13 +86,13 @@ class TestHideUnlistedDefault:
         # Activate an object
         name = env.registry.activate(obj_type, [0.1, 0.1, 0.3])
         mujoco.mj_forward(env.model, env.data)
-        assert env.registry.active_objects[name] == True
+        assert env.registry.active_objects[name]
 
         # Empty update with hide_unlisted=False
         env.update([], hide_unlisted=False)
 
         # Object should still be active
-        assert env.registry.active_objects[name] == True
+        assert env.registry.active_objects[name]
 
 
 class TestScaleCaching:
@@ -98,7 +100,7 @@ class TestScaleCaching:
 
     def test_scale_cache_exists(self, env):
         """Test that scale cache dictionary is initialized."""
-        assert hasattr(env, '_geom_original_size')
+        assert hasattr(env, "_geom_original_size")
         assert isinstance(env._geom_original_size, dict)
 
     def test_original_sizes_are_cached(self, env):
@@ -150,8 +152,7 @@ class TestScaleCaching:
                 for i in range(geom_num1):
                     size1 = env1.model.geom_size[geom_adr1 + i]
                     size2 = env2.model.geom_size[geom_adr2 + i]
-                    assert np.allclose(size1, size2), \
-                        f"Geom sizes differ for {instance_name}: {size1} vs {size2}"
+                    assert np.allclose(size1, size2), f"Geom sizes differ for {instance_name}: {size1} vs {size2}"
 
 
 class TestLoadStateAtomicity:
@@ -168,12 +169,7 @@ class TestLoadStateAtomicity:
         nv = env.model.nv
 
         # Write a state file where active_objects is null (invalid — can't iterate None)
-        state_file.write_text(
-            f"schema_version: 1\n"
-            f"qpos: {[0.5] * nq}\n"
-            f"qvel: {[0.0] * nv}\n"
-            f"active_objects: null\n"
-        )
+        state_file.write_text(f"schema_version: 1\nqpos: {[0.5] * nq}\nqvel: {[0.0] * nv}\nactive_objects: null\n")
 
         original_qpos = env.data.qpos.copy()
 

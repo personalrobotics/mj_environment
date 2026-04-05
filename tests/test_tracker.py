@@ -1,7 +1,10 @@
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2025 Siddhartha Srinivasa
+
 """Tests for ObjectTracker detection-to-instance association."""
 
-import numpy as np
 import pytest
+
 from mj_environment import Environment, ObjectTracker
 
 
@@ -47,9 +50,11 @@ class TestNewObjectAssignment:
     def test_custom_quat_preserved(self, env, tracker):
         obj_type = next(iter(env.registry.objects))
         quat = [0.707, 0.707, 0.0, 0.0]
-        updates = tracker.associate([
-            {"type": obj_type, "pos": [0.0, 0.0, 0.4], "quat": quat},
-        ])
+        updates = tracker.associate(
+            [
+                {"type": obj_type, "pos": [0.0, 0.0, 0.4], "quat": quat},
+            ]
+        )
         assert updates[0]["quat"] == quat
 
 
@@ -119,10 +124,7 @@ class TestPoolExhaustion:
         pool_size = len(env.registry.objects[obj_type]["instances"])
 
         # Detect more objects than the pool can hold
-        detections = [
-            {"type": obj_type, "pos": [i * 0.3, 0.0, 0.4]}
-            for i in range(pool_size + 2)
-        ]
+        detections = [{"type": obj_type, "pos": [i * 0.3, 0.0, 0.4]} for i in range(pool_size + 2)]
         updates = tracker.associate(detections)
 
         # Should cap at pool_size
@@ -133,9 +135,11 @@ class TestUnknownType:
     """Detections with unregistered types are skipped."""
 
     def test_unknown_type_skipped(self, env, tracker):
-        updates = tracker.associate([
-            {"type": "nonexistent_object", "pos": [0.0, 0.0, 0.4]},
-        ])
+        updates = tracker.associate(
+            [
+                {"type": "nonexistent_object", "pos": [0.0, 0.0, 0.4]},
+            ]
+        )
         assert len(updates) == 0
 
     def test_missing_type_key_skipped(self, env, tracker):
@@ -181,18 +185,22 @@ class TestIntegrationWithUpdate:
         types = list(env.registry.objects.keys())[:2]
 
         # Frame 1: detect both types
-        updates1 = tracker.associate([
-            {"type": types[0], "pos": [0.1, 0.0, 0.4]},
-            {"type": types[1], "pos": [-0.1, 0.0, 0.4]},
-        ])
+        updates1 = tracker.associate(
+            [
+                {"type": types[0], "pos": [0.1, 0.0, 0.4]},
+                {"type": types[1], "pos": [-0.1, 0.0, 0.4]},
+            ]
+        )
         env.update(updates1, hide_unlisted=True)
         assert env.registry.is_active(updates1[0]["name"])
         assert env.registry.is_active(updates1[1]["name"])
 
         # Frame 2: only detect first type
-        updates2 = tracker.associate([
-            {"type": types[0], "pos": [0.1, 0.0, 0.4]},
-        ])
+        updates2 = tracker.associate(
+            [
+                {"type": types[0], "pos": [0.1, 0.0, 0.4]},
+            ]
+        )
         env.update(updates2, hide_unlisted=True)
 
         # First object still active, second hidden

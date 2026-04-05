@@ -3,12 +3,12 @@ name = "mj_environment"
 version = "1.1.0"
 description = "A Python module for managing dynamic objects and full environments in MuJoCo"
 readme = "README.md"
-license = {text = "BSD-3-Clause"}
+license = "MIT"
 authors = [
-    {name = "Siddhartha Srinivasa", email = "siddh@cs.washington.edu"}
+    {name = "Siddhartha Srinivasa", email = "siddhartha.srinivasa@gmail.com"},
 ]
 maintainers = [
-    {name = "Siddhartha Srinivasa", email = "siddh@cs.washington.edu"}
+    {name = "Siddhartha Srinivasa", email = "siddhartha.srinivasa@gmail.com"},
 ]
 requires-python = ">=3.9"
 dependencies = [
@@ -30,8 +30,22 @@ asset-manager = { workspace = true }
 requires = ["hatchling"]
 build-backend = "hatchling.build"
 
+[project.urls]
+Homepage = "https://github.com/personalrobotics/mj_environment"
+Repository = "https://github.com/personalrobotics/mj_environment"
+Issues = "https://github.com/personalrobotics/mj_environment/issues"
+
 [tool.hatch.metadata]
 allow-direct-references = true
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/mj_environment"]
+
+[tool.ruff]
+line-length = 120
+
+[tool.ruff.lint]
+select = ["F", "E", "W", "I"]
+
+[tool.ruff.lint.per-file-ignores]
+"src/mj_environment/__init__.py" = ["F401"]

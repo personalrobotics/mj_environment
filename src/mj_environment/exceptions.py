@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2025 Siddhartha Srinivasa
+
 """
 Custom exceptions for mj_environment.
 
@@ -14,6 +17,7 @@ from typing import List, Optional
 
 class MjEnvironmentError(Exception):
     """Base exception for all mj_environment errors."""
+
     pass
 
 
@@ -51,7 +55,7 @@ class ObjectNotFoundError(MjEnvironmentError):
             msg += "\n"
         if similar:
             msg += f"  Did you mean: '{similar[0]}'?\n"
-        msg += f"  Hint: Object names follow the pattern '{{type}}_{{index}}' (e.g., 'cup_0')."
+        msg += "  Hint: Object names follow the pattern '{type}_{index}' (e.g., 'cup_0')."
 
         super().__init__(msg)
 
@@ -66,8 +70,8 @@ class ObjectPoolExhaustedError(MjEnvironmentError):
 
         msg = f"No available '{obj_type}' instances - all {total} are active.\n"
         msg += f"  Active instances: {active}\n"
-        msg += f"  Hint: Either hide() an existing instance or increase the count in scene_config.yaml:\n"
-        msg += f"    objects:\n"
+        msg += "  Hint: Either hide() an existing instance or increase the count in scene_config.yaml:\n"
+        msg += "    objects:\n"
         msg += f"      {obj_type}:\n"
         msg += f"        count: {total + 2}  # increase from {total}"
 

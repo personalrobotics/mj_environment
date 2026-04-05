@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2025 Siddhartha Srinivasa
+
 """
 Dynamic Kitchen Demo
 ====================
@@ -6,10 +9,12 @@ using the mj_environment Environment.
 """
 
 import logging
+import time
+
 import mujoco
 import mujoco.viewer
 import numpy as np
-import time
+
 from mj_environment.environment import Environment
 
 logging.basicConfig(level=logging.DEBUG, format="[%(name)s] %(message)s")
@@ -76,11 +81,13 @@ def dynamic_kitchen_demo():
             # 2️⃣ Move all active objects to random new positions
             updates = []
             for name in active_names:
-                updates.append({
-                    "name": name,
-                    "pos": [rng.uniform(-0.4, 0.4), rng.uniform(-0.4, 0.4), z_center],
-                    "quat": [1, 0, 0, 0],
-                })
+                updates.append(
+                    {
+                        "name": name,
+                        "pos": [rng.uniform(-0.4, 0.4), rng.uniform(-0.4, 0.4), z_center],
+                        "quat": [1, 0, 0, 0],
+                    }
+                )
             env.update(updates, hide_unlisted=False)
 
             # 3️⃣ Every 10 steps: demonstrate fork() for planning
@@ -93,11 +100,13 @@ def dynamic_kitchen_demo():
                     print("[Fork Demo] Moving objects in forked environment...")
                     far_updates = []
                     for name in active_names:
-                        far_updates.append({
-                            "name": name,
-                            "pos": [rng.uniform(-0.8, 0.8), rng.uniform(-0.8, 0.8), z_center],
-                            "quat": [1, 0, 0, 0],
-                        })
+                        far_updates.append(
+                            {
+                                "name": name,
+                                "pos": [rng.uniform(-0.8, 0.8), rng.uniform(-0.8, 0.8), z_center],
+                                "quat": [1, 0, 0, 0],
+                            }
+                        )
                     planning_env.update(far_updates, hide_unlisted=False)
 
                     # Step the fork's physics a few times

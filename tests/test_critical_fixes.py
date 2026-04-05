@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2025 Siddhartha Srinivasa
+
 """
 Regression tests for critical bug fixes (Issue #7).
 
@@ -8,13 +11,14 @@ Tests cover:
 4. State loading visibility restoration
 """
 
-import pytest
-import numpy as np
-import mujoco
-import tempfile
 import os
+import tempfile
+
+import mujoco
+import numpy as np
+import pytest
+
 from mj_environment.environment import Environment
-from mj_environment.object_registry import ObjectRegistry
 
 
 @pytest.fixture
@@ -58,6 +62,7 @@ class TestObjectTypeParsing:
         This is a unit test that mocks the registry's objects dict
         to test the parsing logic without needing actual assets.
         """
+
         # Create a minimal mock registry to test parsing logic
         class MockRegistry:
             def __init__(self):
@@ -70,7 +75,7 @@ class TestObjectTypeParsing:
             def _parse_object_type(self, instance_name):
                 for obj_type in self.objects:
                     if instance_name.startswith(obj_type + "_"):
-                        suffix = instance_name[len(obj_type) + 1:]
+                        suffix = instance_name[len(obj_type) + 1 :]
                         if suffix.isdigit():
                             return obj_type
                 return None
@@ -129,14 +134,14 @@ class TestStateLoadVisibilityRestoration:
         mujoco.mj_forward(env.model, env.data)
 
         # Verify it's active and visible
-        assert env.registry.active_objects[name] == True
+        assert env.registry.active_objects[name]
         body_id = mujoco.mj_name2id(env.model, mujoco.mjtObj.mjOBJ_BODY, name)
         geom_adr = env.model.body_geomadr[body_id]
         original_alpha = env.model.geom_rgba[geom_adr, 3]
         assert original_alpha > 0  # Should be visible
 
         # Save state
-        with tempfile.NamedTemporaryFile(mode='w', suffix='.yaml', delete=False) as f:
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".yaml", delete=False) as f:
             temp_path = f.name
 
         try:
@@ -144,14 +149,14 @@ class TestStateLoadVisibilityRestoration:
 
             # Hide the object manually
             env.registry.hide(name)
-            assert env.registry.active_objects[name] == False
+            assert not env.registry.active_objects[name]
             assert env.model.geom_rgba[geom_adr, 3] == 0  # Should be invisible
 
             # Load state - should restore visibility
             env.load_state(temp_path)
 
             # Verify visibility is restored
-            assert env.registry.active_objects[name] == True
+            assert env.registry.active_objects[name]
             assert env.model.geom_rgba[geom_adr, 3] > 0  # Should be visible again
         finally:
             os.unlink(temp_path)
@@ -163,7 +168,7 @@ class TestStateLoadVisibilityRestoration:
         name = instances[0]
 
         # Save state with object inactive (initial state)
-        with tempfile.NamedTemporaryFile(mode='w', suffix='.yaml', delete=False) as f:
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".yaml", delete=False) as f:
             temp_path = f.name
 
         try:
@@ -172,7 +177,7 @@ class TestStateLoadVisibilityRestoration:
             # Activate the object
             env.registry.activate(obj_type, [0.1, 0.2, 0.3])
             mujoco.mj_forward(env.model, env.data)
-            assert env.registry.active_objects[name] == True
+            assert env.registry.active_objects[name]
 
             body_id = mujoco.mj_name2id(env.model, mujoco.mjtObj.mjOBJ_BODY, name)
             geom_adr = env.model.body_geomadr[body_id]
@@ -182,7 +187,7 @@ class TestStateLoadVisibilityRestoration:
             env.load_state(temp_path)
 
             # Verify object is hidden
-            assert env.registry.active_objects[name] == False
+            assert not env.registry.active_objects[name]
             assert env.model.geom_rgba[geom_adr, 3] == 0  # Should be invisible
         finally:
             os.unlink(temp_path)

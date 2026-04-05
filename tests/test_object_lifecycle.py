@@ -1,11 +1,15 @@
-import os
-import pytest
-import numpy as np
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2025 Siddhartha Srinivasa
+
 import mujoco
+import numpy as np
+import pytest
 import yaml
-from mj_environment.object_registry import HIDE_GRID_SPACING
+
 from mj_environment.environment import Environment
 from mj_environment.exceptions import ConfigurationError
+from mj_environment.object_registry import HIDE_GRID_SPACING
+
 
 @pytest.fixture
 def env():
@@ -14,6 +18,7 @@ def env():
         objects_dir="data/objects",
         scene_config_yaml="data/scene_config.yaml",
     )
+
 
 @pytest.fixture
 def custom_names_env(tmp_path):
@@ -33,15 +38,17 @@ def custom_names_env(tmp_path):
         scene_config_yaml=config_path,
     )
 
+
 def test_activate_and_hide(env):
     obj_type = next(iter(env.registry.objects))
     name = env.registry.activate(obj_type, [0, 0, 0.5])
     assert name in env.registry.active_objects
-    assert env.registry.active_objects[name] == True
+    assert env.registry.active_objects[name]
 
     env.registry.hide(name)
     assert name in env.registry.active_objects
-    assert env.registry.active_objects[name] == False
+    assert not env.registry.active_objects[name]
+
 
 def test_update_positions(env):
     obj_type = next(iter(env.registry.objects))
@@ -130,13 +137,12 @@ def test_hide_returns_object_to_its_grid_spot(env):
 
     # Read back position from qpos
     indices = registry._index_cache.get_body_indices(name)
-    actual_pos = registry.data.qpos[indices.qpos_adr:indices.qpos_adr + 3]
-    assert np.allclose(actual_pos, expected_pos), (
-        f"Expected hide position {expected_pos}, got {actual_pos}"
-    )
+    actual_pos = registry.data.qpos[indices.qpos_adr : indices.qpos_adr + 3]
+    assert np.allclose(actual_pos, expected_pos), f"Expected hide position {expected_pos}, got {actual_pos}"
 
 
 # ---- Custom instance names (#23) ----
+
 
 class TestCustomInstanceNames:
     """Tests for optional custom instance names in scene config."""
@@ -178,6 +184,7 @@ class TestCustomInstanceNames:
     def test_get_type_unknown_raises(self, custom_names_env):
         """get_type() raises ObjectNotFoundError for unknown names."""
         from mj_environment.exceptions import ObjectNotFoundError
+
         with pytest.raises(ObjectNotFoundError):
             custom_names_env.registry.get_type("nonexistent")
 
