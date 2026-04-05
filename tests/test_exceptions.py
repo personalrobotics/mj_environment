@@ -1,19 +1,21 @@
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2025 Siddhartha Srinivasa
+
 """
 Tests for custom exception classes and error messages.
 
 Verifies that exceptions provide helpful context and suggestions.
 """
 
-import os
 import pytest
-from pathlib import Path
+
 from mj_environment import (
+    ConfigurationError,
     Environment,
     MjEnvironmentError,
-    ObjectTypeNotFoundError,
     ObjectNotFoundError,
     ObjectPoolExhaustedError,
-    ConfigurationError,
+    ObjectTypeNotFoundError,
     StateError,
 )
 
@@ -195,9 +197,7 @@ class TestConfigurationError:
             "</mujoco>\n"
         )
         # meta.yaml is required for AssetManager to index this as a known asset
-        (obj_dir / "meta.yaml").write_text(
-            "name: cube\nmujoco:\n  xml_path: cube.xml\n"
-        )
+        (obj_dir / "meta.yaml").write_text("name: cube\nmujoco:\n  xml_path: cube.xml\n")
         (tmp_path / "scene_config.yaml").write_text("objects:\n  cube:\n    count: 1\n")
 
         # cube.stl does not exist — should raise immediately with a clear error

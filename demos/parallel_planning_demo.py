@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2025 Siddhartha Srinivasa
+
 """
 Parallel Planning Demo
 ======================
@@ -10,16 +13,19 @@ may have varying success rates depending on the scenario.
 
 import threading
 import time
-import numpy as np
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
-from typing import Optional, List
+from typing import List, Optional
+
+import numpy as np
+
 from mj_environment import Environment, MjEnvironmentError
 
 
 @dataclass
 class Plan:
     """A simple plan result."""
+
     name: str
     trajectory: List[np.ndarray]
     cost: float
@@ -58,19 +64,11 @@ class MockPlanner:
     def get_plan(self) -> Optional[Plan]:
         """Get the plan result. Returns None if planning failed."""
         if np.random.random() < self.success_prob:
-            return Plan(
-                name=self.name,
-                trajectory=self._trajectory,
-                cost=np.random.uniform(1.0, 10.0)
-            )
+            return Plan(name=self.name, trajectory=self._trajectory, cost=np.random.uniform(1.0, 10.0))
         return None
 
 
-def run_planner(
-    fork: Environment,
-    planner: MockPlanner,
-    cancel: threading.Event
-) -> Optional[Plan]:
+def run_planner(fork: Environment, planner: MockPlanner, cancel: threading.Event) -> Optional[Plan]:
     """
     Run a planner on a forked environment with cancellation support.
 
@@ -146,8 +144,7 @@ def parallel_planning_demo():
     with ThreadPoolExecutor(max_workers=len(planners)) as executor:
         # Submit all planners
         futures = {
-            executor.submit(run_planner, fork, planner, cancel): planner.name
-            for fork, planner in zip(forks, planners)
+            executor.submit(run_planner, fork, planner, cancel): planner.name for fork, planner in zip(forks, planners)
         }
 
         # Process results as they complete

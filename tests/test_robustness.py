@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2025 Siddhartha Srinivasa
+
 """
 Tests for robustness improvements (Issue #9).
 
@@ -6,10 +9,12 @@ Tests cover:
 2. Path handling (absolute paths)
 """
 
-import pytest
-import numpy as np
-import mujoco
 import os
+
+import mujoco
+import numpy as np
+import pytest
+
 from mj_environment.environment import Environment
 from mj_environment.object_registry import _normalize_quaternion as normalize_quaternion
 
@@ -71,7 +76,7 @@ class TestQuaternionNormalization:
         body_id = mujoco.mj_name2id(env.model, mujoco.mjtObj.mjOBJ_BODY, name)
         joint_adr = env.model.body_jntadr[body_id]
         qpos_adr = env.model.jnt_qposadr[joint_adr]
-        stored_quat = env.data.qpos[qpos_adr+3:qpos_adr+7]
+        stored_quat = env.data.qpos[qpos_adr + 3 : qpos_adr + 7]
 
         # Should be normalized
         assert np.allclose(np.linalg.norm(stored_quat), 1.0)
@@ -89,7 +94,7 @@ class TestQuaternionNormalization:
         body_id = mujoco.mj_name2id(env.model, mujoco.mjtObj.mjOBJ_BODY, name)
         joint_adr = env.model.body_jntadr[body_id]
         qpos_adr = env.model.jnt_qposadr[joint_adr]
-        stored_quat = env.data.qpos[qpos_adr+3:qpos_adr+7]
+        stored_quat = env.data.qpos[qpos_adr + 3 : qpos_adr + 7]
 
         # Should be normalized
         assert np.allclose(np.linalg.norm(stored_quat), 1.0)
@@ -173,6 +178,7 @@ class TestThreadSafetyDocumentation:
     def test_registry_has_thread_safety_docs(self):
         """Test that ObjectRegistry has thread safety documentation."""
         from mj_environment.object_registry import ObjectRegistry
+
         docstring = ObjectRegistry.__doc__
         assert "Thread Safety" in docstring
         assert "NOT thread-safe" in docstring

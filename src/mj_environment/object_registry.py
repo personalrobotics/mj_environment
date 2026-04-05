@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2025 Siddhartha Srinivasa
+
 """
 object_registry.py
 Manages object lifecycle (activation, hiding, movement) in MuJoCo.
@@ -13,9 +16,9 @@ import mujoco
 import numpy as np
 
 from .exceptions import (
-    ObjectTypeNotFoundError,
     ObjectNotFoundError,
     ObjectPoolExhaustedError,
+    ObjectTypeNotFoundError,
 )
 
 # Project constants
@@ -33,14 +36,14 @@ def _normalize_quaternion(quat: Union[Sequence[float], np.ndarray]) -> np.ndarra
     norm = np.linalg.norm(q)
     if norm < _QUAT_NORM_EPSILON:
         raise ValueError(
-            f"Cannot normalize near-zero quaternion {q}. "
-            f"Magnitude {norm} is below threshold {_QUAT_NORM_EPSILON}."
+            f"Cannot normalize near-zero quaternion {q}. Magnitude {norm} is below threshold {_QUAT_NORM_EPSILON}."
         )
     return q / norm
 
 
 class _BodyIndices(NamedTuple):
     """Cached indices for a body's joint and state arrays."""
+
     body_id: int
     joint_adr: int
     qpos_adr: int
@@ -216,9 +219,9 @@ class ObjectRegistry:
         for name, pos in self._hide_positions.items():
             if not self.active_objects.get(name, False):
                 indices = self._index_cache.get_body_indices(name)
-                self.data.qpos[indices.qpos_adr:indices.qpos_adr + 3] = pos
+                self.data.qpos[indices.qpos_adr : indices.qpos_adr + 3] = pos
 
-    def copy(self, new_data: mujoco.MjData) -> 'ObjectRegistry':
+    def copy(self, new_data: mujoco.MjData) -> "ObjectRegistry":
         """
         Create an independent copy of this registry with new MjData.
 
@@ -239,10 +242,7 @@ class ObjectRegistry:
         clone._hide_positions = {k: v.copy() for k, v in self._hide_positions.items()}
 
         # Deep copy mutable state
-        clone.objects = {
-            obj_type: {"instances": list(info["instances"])}
-            for obj_type, info in self.objects.items()
-        }
+        clone.objects = {obj_type: {"instances": list(info["instances"])} for obj_type, info in self.objects.items()}
         clone.active_objects = dict(self.active_objects)
         clone.geom_visibility = {k: v.copy() for k, v in self.geom_visibility.items()}
         clone.geom_collision = dict(self.geom_collision)  # Tuples are immutable, shallow copy OK
@@ -271,7 +271,7 @@ class ObjectRegistry:
         # Fallback: parse {type}_{index} pattern
         for obj_type in self.objects:
             if instance_name.startswith(obj_type + "_"):
-                suffix = instance_name[len(obj_type) + 1:]
+                suffix = instance_name[len(obj_type) + 1 :]
                 if suffix.isdigit():
                     return obj_type
         return None
@@ -336,12 +336,12 @@ class ObjectRegistry:
             raise ObjectPoolExhaustedError(obj_type, len(all_instances), all_instances)
         name = candidates[0]
         indices = self._index_cache.get_body_indices(name)
-        self.data.qpos[indices.qpos_adr:indices.qpos_adr+3] = np.array(pos, dtype=float)
+        self.data.qpos[indices.qpos_adr : indices.qpos_adr + 3] = np.array(pos, dtype=float)
         if quat is None:
-            self.data.qpos[indices.qpos_adr+3:indices.qpos_adr+3+4] = IDENTITY_QUATERNION
+            self.data.qpos[indices.qpos_adr + 3 : indices.qpos_adr + 3 + 4] = IDENTITY_QUATERNION
         else:
-            self.data.qpos[indices.qpos_adr+3:indices.qpos_adr+3+4] = _normalize_quaternion(quat)
-        self.data.qvel[indices.qvel_adr:indices.qvel_adr+6] = 0
+            self.data.qpos[indices.qpos_adr + 3 : indices.qpos_adr + 3 + 4] = _normalize_quaternion(quat)
+        self.data.qvel[indices.qvel_adr : indices.qvel_adr + 6] = 0
         self._set_body_visibility(indices.body_id, visible=True)
         self.active_objects[name] = True
         logger.debug("Activated %s", name)
@@ -354,9 +354,9 @@ class ObjectRegistry:
         if not self.active_objects[name]:
             return
         indices = self._index_cache.get_body_indices(name)
-        self.data.qpos[indices.qpos_adr:indices.qpos_adr+3] = self._hide_positions[name]
-        self.data.qpos[indices.qpos_adr+3:indices.qpos_adr+3+4] = IDENTITY_QUATERNION
-        self.data.qvel[indices.qvel_adr:indices.qvel_adr+6] = 0
+        self.data.qpos[indices.qpos_adr : indices.qpos_adr + 3] = self._hide_positions[name]
+        self.data.qpos[indices.qpos_adr + 3 : indices.qpos_adr + 3 + 4] = IDENTITY_QUATERNION
+        self.data.qvel[indices.qvel_adr : indices.qvel_adr + 6] = 0
         self._set_body_visibility(indices.body_id, visible=False)
         self.active_objects[name] = False
         logger.debug("Hid %s", name)
@@ -400,7 +400,9 @@ class ObjectRegistry:
                 if len(pos) != 3:
                     raise ValueError(f"updates[{i}] 'pos' must have 3 elements, got {len(pos)} (name={upd['name']!r})")
             except TypeError:
-                raise ValueError(f"updates[{i}] 'pos' must be a sequence, got {type(pos).__name__} (name={upd['name']!r})")
+                raise ValueError(
+                    f"updates[{i}] 'pos' must be a sequence, got {type(pos).__name__} (name={upd['name']!r})"
+                )
 
         # Default behavior: hide unlisted objects
         if hide_unlisted is None:
@@ -424,9 +426,9 @@ class ObjectRegistry:
                 active_now.add(new_name)
             else:
                 indices = self._index_cache.get_body_indices(name)
-                self.data.qpos[indices.qpos_adr:indices.qpos_adr+3] = pos
-                self.data.qpos[indices.qpos_adr+3:indices.qpos_adr+3+4] = quat
-                self.data.qvel[indices.qvel_adr:indices.qvel_adr+6] = 0
+                self.data.qpos[indices.qpos_adr : indices.qpos_adr + 3] = pos
+                self.data.qpos[indices.qpos_adr + 3 : indices.qpos_adr + 3 + 4] = quat
+                self.data.qvel[indices.qvel_adr : indices.qvel_adr + 6] = 0
                 # Make sure the object is visible (it might have been hidden previously)
                 if not self.active_objects[name]:
                     self._set_body_visibility(indices.body_id, visible=True)

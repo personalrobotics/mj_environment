@@ -285,4 +285,4 @@ logging.getLogger("mj_environment").setLevel(logging.DEBUG)
 
 ## License
 
-BSD-3-Clause — [Personal Robotics Laboratory](https://github.com/personalrobotics), University of Washington
+MIT — see [LICENSE](LICENSE).
