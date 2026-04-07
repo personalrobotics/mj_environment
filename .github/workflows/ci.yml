@@ -11,6 +11,11 @@ concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
 
+env:
+  # Standalone CI has no workspace context. Skip [tool.uv.sources]
+  # workspace overrides and use the git URLs in dependencies instead.
+  UV_NO_SOURCES: "true"
+
 jobs:
   test:
     runs-on: ubuntu-latest
