@@ -263,9 +263,18 @@ class Environment:
                     obj_body = obj_spec.worldbody.first_body()
                     frame = spec.worldbody.add_frame()
                     frame.pos = list(hide_pos)
-                    # Rename the top-level body to the instance name
-                    obj_body.name = instance_name
-                    frame.attach_body(obj_body, "", "")
+                    # Use instance_name as prefix to namespace all internal
+                    # names (meshes, joints, geoms) and avoid collisions.
+                    # The top-level body gets named "instance_name/original",
+                    # but we rename it to just "instance_name" after attach.
+                    prefix = f"{instance_name}/"
+                    original_body_name = obj_body.name or obj_type
+                    frame.attach_body(obj_body, prefix, "")
+                    # Find and rename the attached body
+                    prefixed_name = f"{prefix}{original_body_name}"
+                    attached = spec.worldbody.find_child(prefixed_name)
+                    if attached is not None:
+                        attached.name = instance_name
 
         # Compile
         env.model = spec.compile()
