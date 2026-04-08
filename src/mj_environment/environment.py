@@ -186,6 +186,105 @@ class Environment:
         logger.info("Loaded scene from pre-compiled model (%d bodies)", model.nbody)
         return env
 
+    @classmethod
+    def from_spec(
+        cls,
+        spec: mujoco.MjSpec,
+        objects_dir: Optional[str] = None,
+        scene_config: Optional[dict] = None,
+        hide_pos: List[float] = DEFAULT_HIDE_POSITION,
+    ) -> "Environment":
+        """Create an Environment from an MjSpec with optional prl_assets objects.
+
+        Use this when the robot needs MjSpec assembly (attaching a gripper,
+        adding an EE site) before adding objects. MjSpec handles mesh path
+        resolution natively, avoiding the file-path issues of ``__init__``.
+
+        Objects are attached via ``MjSpec.attach_body`` with proper naming
+        (``type_N``), then compiled. The full object registry is available.
+
+        Args:
+            spec: MjSpec with the robot already assembled.
+            objects_dir: Path to prl_assets objects directory.
+            scene_config: Objects dict, e.g. ``{"can": {"count": 3}}``.
+                Also accepts the short form ``{"can": 3}``.
+            hide_pos: Position to place objects before activation.
+
+        Returns:
+            Environment with full object lifecycle management.
+
+        Example::
+
+            spec = mujoco.MjSpec.from_file("franka_scene.xml")
+            add_franka_ee_site(spec)
+            env = Environment.from_spec(
+                spec,
+                objects_dir=str(OBJECTS_DIR),
+                scene_config={"can": 3, "yellow_tote": 1},
+            )
+        """
+        env = cls.__new__(cls)
+        env.hide_pos = list(hide_pos)
+        env.assets = {}
+        env._geom_original_size = {}
+
+        # Normalize scene_config
+        normalized: Dict[str, Any] = {}
+        if scene_config:
+            for obj_type, entry in scene_config.items():
+                if isinstance(entry, int):
+                    entry = {"count": entry}
+                if "names" not in entry:
+                    count = entry.get("count", 1)
+                    entry["names"] = [f"{obj_type}_{i}" for i in range(count)]
+                normalized[obj_type] = entry
+
+        env._has_objects = bool(normalized)
+
+        # Set up AssetManager
+        if env._has_objects and objects_dir is not None:
+            env.asset_manager = AssetManager(base_dir=objects_dir)
+        else:
+            env.asset_manager = None
+
+        # Attach objects to the spec via MjSpec (native path resolution)
+        if env._has_objects and env.asset_manager is not None:
+            for obj_type, entry in normalized.items():
+                if obj_type not in env.asset_manager.list():
+                    logger.warning("Unknown asset '%s', skipping", obj_type)
+                    continue
+                xml_path = env.asset_manager.get_path(obj_type, "mujoco")
+                if xml_path is None or not os.path.exists(xml_path):
+                    logger.warning("No XML for '%s', skipping", obj_type)
+                    continue
+
+                for instance_name in entry["names"]:
+                    obj_spec = mujoco.MjSpec.from_file(xml_path)
+                    obj_body = obj_spec.worldbody.first_body()
+                    frame = spec.worldbody.add_frame()
+                    frame.pos = list(hide_pos)
+                    # Rename the top-level body to the instance name
+                    obj_body.name = instance_name
+                    frame.attach_body(obj_body, "", "")
+
+        # Compile
+        env.model = spec.compile()
+        env.data = mujoco.MjData(env.model)
+
+        # Apply metadata overrides (mass, color, scale)
+        if env._has_objects and env.asset_manager is not None:
+            env._apply_metadata_overrides(normalized)
+
+        # Set up registry
+        if env._has_objects and env.asset_manager is not None:
+            env.registry = ObjectRegistry(env.model, env.data, env.asset_manager, normalized, hide_pos)
+        else:
+            env.registry = None
+
+        object_count = len(env.registry.objects) if env.registry else 0
+        logger.info("Loaded scene from MjSpec with %d object types", object_count)
+        return env
+
     def _load_scene_config(self, objects_dir: Optional[str], scene_config_yaml: Optional[str]) -> Dict[str, Any]:
         """Load and validate scene configuration.
 
