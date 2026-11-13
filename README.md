@@ -31,10 +31,12 @@ env = Environment(
 )
 
 # Activate and position objects
-env.update([
-    {"name": "cup_0", "pos": [0.1, 0.2, 0.4], "quat": [1, 0, 0, 0]},
-    {"name": "plate_0", "pos": [-0.2, 0.0, 0.4], "quat": [1, 0, 0, 0]},
-])
+env.update(
+    [
+        {"name": "cup_0", "pos": [0.1, 0.2, 0.4], "quat": [1, 0, 0, 0]},
+        {"name": "plate_0", "pos": [-0.2, 0.0, 0.4], "quat": [1, 0, 0, 0]},
+    ]
+)
 
 # Step physics
 env.step()
@@ -91,12 +93,14 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 
 cancel = threading.Event()
 
+
 def run_planner(fork, planner, cancel):
     for step in planner.steps():
         if cancel.is_set():
             return None  # Cancelled
         fork.step()
     return planner.get_plan()
+
 
 forks = env.fork_many(4)
 with ThreadPoolExecutor() as executor:
@@ -277,6 +281,7 @@ mj_environment uses Python's `logging` module. Configure it to see debug output:
 
 ```python
 import logging
+
 logging.basicConfig(level=logging.DEBUG)
 
 # Or for mj_environment only:
