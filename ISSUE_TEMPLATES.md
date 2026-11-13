@@ -74,6 +74,7 @@ Four critical bugs have been identified that affect core functionality:
    import copy
    from xml.etree.ElementTree import Element
 
+
    def deep_copy_element(elem):
        new_elem = Element(elem.tag, elem.attrib)
        new_elem.text = elem.text
@@ -230,6 +231,7 @@ Several robustness issues that affect reliability:
 2. **Absolute path handling:**
    ```python
    import os
+
    abs_scene_path = os.path.abspath(base_scene_xml)
    SubElement(mujoco_el, "include", {"file": abs_scene_path})
    ```
