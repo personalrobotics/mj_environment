@@ -10,7 +10,7 @@ authors = [
 maintainers = [
     {name = "Siddhartha Srinivasa", email = "siddhartha.srinivasa@gmail.com"},
 ]
-requires-python = ">=3.9"
+requires-python = ">=3.10"
 dependencies = [
     "mujoco>=2.1.0",
     "numpy",
@@ -26,9 +26,6 @@ dev = [
     "pytest>=8.0.0",
     "ruff",
 ]
-
-[tool.uv.sources]
-asset-manager = { workspace = true }
 
 [build-system]
 requires = ["hatchling"]
